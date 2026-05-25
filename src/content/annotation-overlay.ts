@@ -20,9 +20,6 @@ export type OverlayRefs = {
 };
 
 export type FallbackHandlers = {
-  onSavePng: () => void;
-  onCopyPng: () => void;
-  onCopyText: () => void;
   onClose: () => void;
 };
 
@@ -148,16 +145,13 @@ export function setCapturing(refs: OverlayRefs, capturing: boolean): void {
   refs.primaryButton.disabled = capturing;
   refs.secondaryButton.disabled = capturing;
   refs.textarea.disabled = capturing;
-  refs.primaryButton.textContent = capturing ? "Capturando..." : COPY.capture;
+  refs.primaryButton.textContent = capturing ? COPY.copying : COPY.capture;
 }
 
 export function showFallback(refs: OverlayRefs, fallback: CaptureFallback, handlers: FallbackHandlers): void {
   const fallbackText = formatFallbackText(fallback.markdownPrompt, fallback.diagnostics);
   const diagnostics = formatDiagnostics(fallback.diagnostics);
-  const clipboardBlocked = diagnostics.includes("clipboard:write:error");
-  const image = fallback.imageDataUrl
-    ? `<img class="fallback-image" src="${fallback.imageDataUrl}" alt="Preview do PNG anotado" />`
-    : `<div class="fallback-empty">PNG indisponivel</div>`;
+  const clipboardBlocked = diagnostics.includes("clipboard:writeText:error");
   const diagnosticsBlock = diagnostics
     ? `<details class="fallback-diagnostics" open>
         <summary>Detalhes tecnicos</summary>
@@ -170,28 +164,18 @@ export function showFallback(refs: OverlayRefs, fallback: CaptureFallback, handl
       <strong>${COPY.fallbackTitle}</strong>
       <button class="fallback-close" type="button" aria-label="Fechar">×</button>
     </div>
-    ${clipboardBlocked ? `<p class="fallback-note">${COPY.fallbackClipboardBlocked}</p>` : ""}
-    ${image}
+    ${clipboardBlocked ? `<p class="fallback-note">${COPY.fallbackManual}</p>` : ""}
     <textarea class="fallback-text" aria-label="Prompt markdown">${escapeHtml(fallbackText)}</textarea>
     ${diagnosticsBlock}
-    <div class="actions">
-      <button class="secondary save" type="button" ${fallback.imageDataUrl && fallback.canSavePng ? "" : "disabled"}>${COPY.savePng}</button>
-      <button class="primary copy-png" type="button" ${fallback.imageDataUrl ? "" : "disabled"}>${COPY.copyPng}</button>
-      <button class="secondary copy-text" type="button">${COPY.copyText}</button>
-    </div>
   `;
 
   refs.fallback.style.display = "block";
   refs.fallback.style.opacity = "1";
   refs.fallback.style.pointerEvents = "auto";
-  refs.fallback.querySelector<HTMLButtonElement>(".save")?.addEventListener("click", handlers.onSavePng);
-  const copyPngButton = refs.fallback.querySelector<HTMLButtonElement>(".copy-png");
-  copyPngButton?.addEventListener("click", () => {
-    copyPngButton.focus({ preventScroll: true });
-    handlers.onCopyPng();
-  });
-  refs.fallback.querySelector<HTMLButtonElement>(".copy-text")?.addEventListener("click", handlers.onCopyText);
   refs.fallback.querySelector<HTMLButtonElement>(".fallback-close")?.addEventListener("click", handlers.onClose);
+  const textarea = refs.fallback.querySelector<HTMLTextAreaElement>(".fallback-text");
+  textarea?.focus({ preventScroll: true });
+  textarea?.select();
 }
 
 export function hideFallback(refs: OverlayRefs): void {

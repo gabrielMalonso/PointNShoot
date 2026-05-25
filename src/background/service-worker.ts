@@ -1,8 +1,9 @@
-import { buildMarkdownPrompt } from "../shared/render-png";
 import { appendDiagnostic, errorDiagnostic, makeDiagnostic } from "../shared/diagnostics";
+import { buildDownloadFilename, downloadRenderedPng, getConfiguredDownloadFolder } from "./downloads";
 import { toCaptureFailureReason } from "../shared/errors";
-import { isCaptureRequestMessage, MESSAGE_TYPES } from "../shared/messages";
-import type { CaptureRequest, CaptureResult, DiagnosticLogEntry, RenderRequestMessage } from "../shared/types";
+import { isCaptureRequestMessage, isRenderImageResult, MESSAGE_TYPES } from "../shared/messages";
+import type { CaptureRequest, CaptureResult, DiagnosticLogEntry, RenderImageResult, RenderRequestMessage } from "../shared/types";
+import { buildUiNote } from "../shared/ui-note";
 
 const OFFSCREEN_PATH = "offscreen/offscreen.html";
 let creatingOffscreen: Promise<void> | null = null;
@@ -89,17 +90,62 @@ async function handleCapture(request: CaptureRequest, sender: chrome.runtime.Mes
       payload: { request, screenshotDataUrl, diagnostics },
     };
 
-    const result = (await withTimeout(
+    const renderResult = (await withTimeout(
       chrome.runtime.sendMessage(renderMessage),
       8_000,
       "render-failed: offscreen render timed out",
-    )) as CaptureResult | undefined;
+    )) as RenderImageResult | undefined;
 
-    if (!result) throw new Error("render-failed: offscreen document returned no result");
-    if (!result.ok && !result.fallback.diagnostics) {
-      result.fallback.diagnostics = [...diagnostics, ...(result.fallback.diagnostics ?? [])];
+    if (!renderResult) throw new Error("render-failed: offscreen document returned no result");
+    if (!isRenderImageResult(renderResult)) throw new Error("render-failed: offscreen document returned malformed result");
+
+    if (!renderResult.ok) {
+      return {
+        ...renderResult,
+        diagnostics: renderResult.fallback.diagnostics,
+        fallback: {
+          ...renderResult.fallback,
+          diagnostics: renderResult.fallback.diagnostics ?? diagnostics,
+        },
+      };
     }
-    return result;
+
+    diagnostics = renderResult.diagnostics ?? diagnostics;
+    diagnostics = appendDiagnostic(
+      diagnostics,
+      makeDiagnostic("background", "info", "download:start", "Saving rendered PNG to Downloads.", {
+        requestId: request.id,
+        imageBytes: renderResult.imageBytes,
+        dataUrlBytes: renderResult.imageDataUrl.length,
+      }),
+    );
+
+    const requestedFilename = buildDownloadFilename(request, {
+      folder: await getConfiguredDownloadFolder(),
+    });
+    const savedImage = await downloadRenderedPng({
+      imageDataUrl: renderResult.imageDataUrl,
+      requestedFilename,
+      imageBytes: renderResult.imageBytes,
+      width: renderResult.width,
+      height: renderResult.height,
+    });
+    diagnostics = appendDiagnostic(
+      diagnostics,
+      makeDiagnostic("background", "info", "download:complete", "PNG saved and absolute filename confirmed.", {
+        requestId: request.id,
+        downloadId: savedImage.downloadId,
+        requestedFilename: savedImage.requestedFilename,
+        filename: savedImage.filename,
+      }),
+    );
+
+    return {
+      ok: true,
+      markdownPrompt: buildUiNote(request, { imagePath: savedImage.filename }),
+      savedImage,
+      diagnostics,
+    };
   } catch (error) {
     diagnostics = appendDiagnostic(diagnostics, errorDiagnostic("background", "capture:error", error, { requestId: request.id }));
     return failureResult(request, error, diagnostics);
@@ -151,8 +197,8 @@ async function ensureOffscreenDocument(): Promise<void> {
     creatingOffscreen = chrome.offscreen
       .createDocument({
         url: OFFSCREEN_PATH,
-        reasons: ["CLIPBOARD" as chrome.offscreen.Reason],
-        justification: "Compose and copy annotated PointNShoot PNG screenshots locally.",
+        reasons: ["BLOBS" as chrome.offscreen.Reason],
+        justification: "Compose PointNShoot PNG crops locally before saving them.",
       })
       .finally(() => {
         creatingOffscreen = null;
@@ -204,8 +250,7 @@ function failureResult(request: CaptureRequest, error: unknown, diagnostics: Dia
     ok: false,
     reason,
     fallback: {
-      markdownPrompt: buildMarkdownPrompt(request),
-      canSavePng: false,
+      markdownPrompt: buildUiNote(request),
       diagnostics,
     },
   };

@@ -22,9 +22,10 @@ import { COPY } from "../shared/copy";
 import { appendDiagnostic, errorDiagnostic, makeDiagnostic } from "../shared/diagnostics";
 import { MESSAGE_TYPES } from "../shared/messages";
 import type { CaptureFallback, CaptureResult, DiagnosticLogEntry } from "../shared/types";
+import { buildMinimalUiNote, buildUiNote } from "../shared/ui-note";
 
 type PointNShootState = "idle" | "picking" | "locked" | "capturing" | "fallback";
-const CONTROLLER_VERSION = "0.1.3";
+const CONTROLLER_VERSION = "0.2.0";
 
 declare global {
   interface Window {
@@ -42,8 +43,6 @@ class PointNShootController {
   private overlayVisible = false;
   private hoveredElement: Element | null = null;
   private selectedElement: Element | null = null;
-  private fallbackImageDataUrl: string | null = null;
-  private fallbackImageBlob: Blob | null = null;
   private listenersAttached = false;
 
   constructor() {
@@ -114,7 +113,6 @@ class PointNShootController {
     this.state = "picking";
     this.hoveredElement = null;
     this.selectedElement = null;
-    this.fallbackImageBlob = null;
     this.refs.host.style.display = "block";
     this.refs.host.style.visibility = "visible";
     setPickActive(this.refs, true);
@@ -142,8 +140,6 @@ class PointNShootController {
     this.state = "idle";
     this.hoveredElement = null;
     this.selectedElement = null;
-    this.fallbackImageDataUrl = null;
-    this.fallbackImageBlob = null;
     this.refs.textarea.value = "";
     this.refs.host.style.visibility = "visible";
     setCapturing(this.refs, false);
@@ -380,13 +376,14 @@ class PointNShootController {
       return;
     }
 
-    const request = createCaptureRequest(this.selectedElement, comment);
+    let request: ReturnType<typeof createCaptureRequest> | null = null;
     this.state = "capturing";
     setCapturing(this.refs, true);
     this.refs.host.style.visibility = "hidden";
     await nextPaint();
 
     try {
+      request = createCaptureRequest(this.selectedElement, comment);
       const response = (await chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.captureRequest,
         payload: request,
@@ -411,8 +408,7 @@ class PointNShootController {
         },
       ];
       const fallback: CaptureFallback = {
-        markdownPrompt: `# PointNShoot\n\nComentario: ${comment}`,
-        canSavePng: false,
+        markdownPrompt: request ? buildUiNote(request) : buildMinimalUiNote(comment),
         diagnostics,
       };
       console.error("[PointNShoot] capture failed", error);
@@ -422,12 +418,12 @@ class PointNShootController {
 
   private async handleCaptureResult(result: CaptureResult): Promise<void> {
     if (result.ok) {
-      showToast(this.refs, COPY.copied, 1800);
-      this.cancel();
-      return;
-    }
+      const fallback = await this.tryCopyUiNote(result.markdownPrompt, result.diagnostics);
+      if (fallback) {
+        this.showCaptureFallback(fallback);
+        return;
+      }
 
-    if (result.fallback.imageDataUrl && (await this.tryCopyPngFromFocusedPage(result.fallback, "auto"))) {
       showToast(this.refs, COPY.copied, 1800);
       this.cancel();
       return;
@@ -440,101 +436,59 @@ class PointNShootController {
     this.state = "fallback";
     setPickActive(this.refs, true);
     setPageInteractionBlocked(this.refs, true);
-    this.fallbackImageDataUrl = fallback.imageDataUrl ?? null;
     hidePanel(this.refs);
     showToast(this.refs, COPY.captureFailed, 1800);
     showFallback(this.refs, fallback, {
-      onSavePng: () => this.saveFallbackPng(),
-      onCopyPng: () => void this.copyFallbackPng(fallback),
-      onCopyText: () => void this.copyFallbackText(fallback.markdownPrompt),
       onClose: () => this.cancel(),
     });
   }
 
-  private saveFallbackPng(): void {
-    if (!this.fallbackImageDataUrl) return;
-    const anchor = document.createElement("a");
-    anchor.href = this.fallbackImageDataUrl;
-    anchor.download = "pointnshoot.png";
-    anchor.click();
-  }
-
-  private async copyFallbackText(markdownPrompt: string): Promise<void> {
-    const fallbackTextarea = this.refs.fallback.querySelector<HTMLTextAreaElement>(".fallback-text");
-    await navigator.clipboard.writeText(fallbackTextarea?.value ?? markdownPrompt);
-    showToast(this.refs, COPY.copiedText, 1200);
-  }
-
-  private async copyFallbackPng(fallback: CaptureFallback): Promise<void> {
-    if (await this.tryCopyPngFromFocusedPage(fallback, "fallback-click")) {
-      showToast(this.refs, COPY.copied, 1800);
-      this.cancel();
-      return;
-    }
-
-    showToast(this.refs, COPY.captureFailed, 1800);
-    this.showCaptureFallback(fallback);
-  }
-
-  private async tryCopyPngFromFocusedPage(fallback: CaptureFallback, source: "auto" | "fallback-click"): Promise<boolean> {
-    let diagnostics = fallback.diagnostics ?? [];
-    this.prepareClipboardFocus(source);
+  private async tryCopyUiNote(markdownPrompt: string, baseDiagnostics: DiagnosticLogEntry[] = []): Promise<CaptureFallback | null> {
+    let diagnostics = baseDiagnostics;
+    this.prepareClipboardFocus();
 
     diagnostics = appendDiagnostic(
       diagnostics,
-      makeDiagnostic("content", "info", "clipboard:write:start", "Attempting focused-tab navigator.clipboard.write(image/png).", {
-        source,
+      makeDiagnostic("content", "info", "clipboard:writeText:start", "Attempting focused-tab navigator.clipboard.writeText(UI Note).", {
         ...clipboardCapabilityDetails(),
       }),
     );
 
     try {
-      const blob = await this.getFallbackImageBlob(fallback);
-      await copyPngBlobToClipboard(blob);
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("clipboard-blocked: navigator.clipboard.writeText unavailable in focused tab");
+      }
+
+      await navigator.clipboard.writeText(markdownPrompt);
       diagnostics = appendDiagnostic(
         diagnostics,
-        makeDiagnostic("content", "info", "clipboard:write:ok", "PNG copied from focused tab.", {
-          source,
-          imageBytes: blob.size,
-          blobType: blob.type,
+        makeDiagnostic("content", "info", "clipboard:writeText:ok", "UI Note copied from focused tab.", {
           ...clipboardCapabilityDetails(),
         }),
       );
-      fallback.diagnostics = diagnostics;
-      return true;
+      return null;
     } catch (error) {
       diagnostics = appendDiagnostic(
         diagnostics,
-        errorDiagnostic("content", "clipboard:write:error", error, {
-          source,
+        errorDiagnostic("content", "clipboard:writeText:error", error, {
           ...clipboardCapabilityDetails(),
         }),
       );
-      fallback.diagnostics = diagnostics;
-      return false;
+      return {
+        markdownPrompt,
+        diagnostics,
+      };
     }
   }
 
-  private prepareClipboardFocus(source: "auto" | "fallback-click"): void {
+  private prepareClipboardFocus(): void {
     try {
       window.focus();
     } catch {
       // Best effort only; Chrome may ignore focus() from a content script.
     }
 
-    const target =
-      source === "fallback-click"
-        ? this.refs.fallback.querySelector<HTMLButtonElement>(".copy-png")
-        : this.refs.primaryButton;
-    target?.focus({ preventScroll: true });
-  }
-
-  private async getFallbackImageBlob(fallback: CaptureFallback): Promise<Blob> {
-    if (this.fallbackImageBlob) return this.fallbackImageBlob;
-
-    const blob = await dataUrlToBlob(fallback.imageDataUrl);
-    this.fallbackImageBlob = blob;
-    return blob;
+    this.refs.primaryButton.focus({ preventScroll: true });
   }
 }
 
@@ -542,32 +496,6 @@ function nextPaint(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   });
-}
-
-async function dataUrlToBlob(dataUrl: string | undefined): Promise<Blob> {
-  if (!dataUrl) throw new Error("clipboard-blocked: missing rendered PNG data URL");
-  const response = await fetch(dataUrl);
-  const blob = await response.blob();
-  if (blob.type !== "image/png") {
-    return new Blob([blob], { type: "image/png" });
-  }
-  return blob;
-}
-
-async function copyPngBlobToClipboard(blob: Blob): Promise<void> {
-  if (typeof ClipboardItem === "undefined") {
-    throw new Error("clipboard-blocked: ClipboardItem unavailable in focused tab");
-  }
-
-  if (!navigator.clipboard?.write) {
-    throw new Error("clipboard-blocked: navigator.clipboard.write unavailable in focused tab");
-  }
-
-  await navigator.clipboard.write([
-    new ClipboardItem({
-      "image/png": blob,
-    }),
-  ]);
 }
 
 const reusableController =

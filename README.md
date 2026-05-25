@@ -1,6 +1,6 @@
 # PointNShoot
 
-Extensao Chrome local para selecionar visualmente um elemento, escrever um comentario e copiar um PNG anotado para colar em agentes de codigo.
+Extensao Chrome local para selecionar visualmente um elemento, escrever um comentario, salvar um PNG cropado e copiar uma UI Note para agentes de codigo.
 
 ## Usar localmente
 
@@ -19,10 +19,12 @@ Depois, abra `chrome://extensions`, ative o modo de desenvolvedor e carregue a p
 4. Passe o mouse sobre um elemento.
 5. Clique para travar a selecao.
 6. Escreva o comentario.
-7. Pressione `Cmd+Enter`.
-8. Cole o PNG no agente de codigo.
+7. Clique em `Copiar` ou pressione `Cmd+Enter`.
+8. Cole a nota Markdown no agente de codigo.
 
-Se a copia do PNG for bloqueada, PointNShoot abre um fallback com preview, botao de salvar PNG e texto markdown copiavel.
+O PNG e salvo em `Downloads/PointNShoot-PNG/`. A nota copiada separa `## Prompt` do usuario de `## Informacoes`, que contem o path absoluto do arquivo salvo e um bloco tecnico curto: URL redigida, elemento selecionado, elemento no ponto, texto, ponto, rect e pistas de layout. Se o clipboard de texto for bloqueado depois do download, PointNShoot abre um fallback com a nota completa selecionada para copia manual.
+
+A subpasta de Downloads pode ser configurada via `chrome.storage.local` na chave `pointNShootDownloadFolder`; se ela nao existir, o fallback e `PointNShoot-PNG`.
 
 ## Validacao
 
@@ -37,7 +39,7 @@ pnpm smoke
 
 ## Escopo
 
-PointNShoot nao tem backend, MCP, servidor local, automacao de codigo, login, cloud, telemetria ou historico sincronizado. O artefato principal e o PNG anotado no clipboard.
+PointNShoot nao tem backend, MCP, servidor local, automacao de codigo, login, cloud, telemetria, Native Messaging ou historico sincronizado. Os artefatos principais sao o PNG local salvo e a nota Markdown copiada.
 
 ## Documentacao
 

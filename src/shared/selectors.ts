@@ -12,7 +12,23 @@ export function escapeCssString(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\a ");
 }
 
-const STABLE_SELECTOR_ATTRIBUTES = ["data-testid", "data-test-id", "data-cy", "data-qa", "data-component"] as const;
+const STABLE_SELECTOR_ATTRIBUTES = ["data-testid", "data-slot", "data-test-id", "data-cy", "data-qa", "data-component"] as const;
+const SEMANTIC_TAGS = new Set([
+  "article",
+  "aside",
+  "button",
+  "footer",
+  "form",
+  "header",
+  "main",
+  "nav",
+  "section",
+  "table",
+  "tbody",
+  "td",
+  "th",
+  "thead",
+]);
 
 export function getElementClasses(element: Element, limit = 4): string[] {
   return Array.from(element.classList)
@@ -49,16 +65,22 @@ export function getShortSelector(element: Element): string {
   const stableSelector = getStableSelector(element);
   if (stableSelector) return stableSelector;
 
-  const ancestorSelector = getNearestStableAncestorSelector(element);
-  if (ancestorSelector) return ancestorSelector;
-
   const tag = element.tagName.toLowerCase();
-  const id = element.id ? `#${escapeCssIdentifier(element.id)}` : "";
-  const classes = getElementClasses(element, 3)
+  const ariaLabel = element.getAttribute("aria-label")?.trim();
+  if (ariaLabel) return `${tag}[aria-label="${escapeCssString(ariaLabel)}"]`;
+
+  const role = getRole(element);
+  const accessibleName = getAccessibleName(element);
+  if (role && accessibleName) return `${tag}[role="${escapeCssString(role)}"][name="${escapeCssString(accessibleName)}"]`;
+
+  if (element.id) return `${tag}#${escapeCssIdentifier(element.id)}`;
+  if (SEMANTIC_TAGS.has(tag)) return tag;
+
+  const classes = getShortClasses(element, 2)
     .map((item) => `.${escapeCssIdentifier(item)}`)
     .join("");
 
-  return `${tag}${id}${classes}`;
+  return `${tag}${classes}`;
 }
 
 export function getNthOfType(element: Element): number {
@@ -117,4 +139,60 @@ export function describeParent(element: Element): string | null {
   const parent = element.parentElement;
   if (!parent) return null;
   return getShortSelector(parent);
+}
+
+function getShortClasses(element: Element, limit: number): string[] {
+  return getElementClasses(element, 8)
+    .filter((item) => item.length <= 32)
+    .filter((item) => !hasSelectorNoisyCharacters(item))
+    .slice(0, limit);
+}
+
+function hasSelectorNoisyCharacters(value: string): boolean {
+  return value.includes("[") || value.includes("]") || value.includes("(") || value.includes(")") || value.includes(":");
+}
+
+function getRole(element: Element): string | null {
+  const explicit = element.getAttribute("role");
+  if (explicit) return explicit;
+
+  const tag = element.tagName.toLowerCase();
+  if (tag === "button") return "button";
+  if (tag === "a" && element.hasAttribute("href")) return "link";
+  if (tag === "input") {
+    const type = element.getAttribute("type") ?? "text";
+    if (type === "checkbox") return "checkbox";
+    if (type === "radio") return "radio";
+    return "textbox";
+  }
+  if (tag === "textarea") return "textbox";
+  if (tag === "select") return "combobox";
+
+  return null;
+}
+
+function getAccessibleName(element: Element): string | null {
+  const labelledBy = element.getAttribute("aria-labelledby");
+  if (labelledBy && element.ownerDocument) {
+    const text = labelledBy
+      .split(/\s+/)
+      .map((id) => element.ownerDocument.getElementById(id)?.textContent ?? "")
+      .join(" ")
+      .trim();
+    if (text) return text.slice(0, 120);
+  }
+
+  const alt = element.getAttribute("alt")?.trim();
+  if (alt) return alt.slice(0, 120);
+
+  const title = element.getAttribute("title")?.trim();
+  if (title) return title.slice(0, 120);
+
+  const role = getRole(element);
+  if (role === "button" || role === "link") {
+    const text = ((element as HTMLElement).innerText ?? element.textContent ?? "").replace(/\s+/g, " ").trim();
+    if (text) return text.slice(0, 120);
+  }
+
+  return null;
 }

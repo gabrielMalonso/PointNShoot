@@ -11,7 +11,7 @@ describe("diagnostics", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-    const entry = makeDiagnostic("content", "info", "clipboard:write:ok", "PNG copied from focused tab.");
+    const entry = makeDiagnostic("content", "info", "clipboard:writeText:ok", "UI Note copied from focused tab.");
     const entries = appendDiagnostic([], entry);
 
     expect(entries).toEqual([entry]);

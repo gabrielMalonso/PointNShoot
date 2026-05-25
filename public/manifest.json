@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PointNShoot",
-  "description": "Selecione um elemento, anote e copie um screenshot para usar com agentes de codigo.",
+  "description": "Selecione um elemento, anote, salve um PNG local e copie uma UI Note para agentes de codigo.",
   "version": "0.1.0",
   "action": {
     "default_title": "PointNShoot"
@@ -14,6 +14,8 @@
     "activeTab",
     "scripting",
     "offscreen",
+    "downloads",
+    "storage",
     "clipboardWrite"
   ],
   "commands": {

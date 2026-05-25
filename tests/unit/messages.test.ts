@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCaptureRequestMessage, isRenderRequestMessage, isRuntimeMessage } from "../../src/shared/messages";
+import { isCaptureRequestMessage, isCaptureResult, isRenderImageResult, isRenderRequestMessage, isRuntimeMessage } from "../../src/shared/messages";
 import type { CaptureRequest } from "../../src/shared/types";
 
 const request: CaptureRequest = {
@@ -34,6 +34,23 @@ const request: CaptureRequest = {
     },
     url: "https://example.com",
     pageTitle: "Example",
+    usefulStyles: {
+      position: "static",
+      zIndex: "auto",
+      display: "block",
+      visibility: "visible",
+      opacity: "1",
+      transform: "none",
+      pointerEvents: "auto",
+      overflow: "visible",
+      isolation: "auto",
+    },
+    topElementAtPoint: {
+      x: 60,
+      y: 60,
+      label: "div.card",
+      shortSelector: "div.card",
+    },
   },
 };
 
@@ -44,9 +61,38 @@ describe("message guards", () => {
     expect(isRenderRequestMessage({ type: "POINTNSHOOT_RENDER_REQUEST", payload: { request, screenshotDataUrl: "data:image/png;base64,abc" } })).toBe(true);
   });
 
+  it("recognizes capture and render results", () => {
+    expect(
+      isCaptureResult({
+        ok: true,
+        markdownPrompt: "# UI Note",
+        savedImage: {
+          downloadId: 7,
+          filename: "/Users/test/Downloads/PointNShoot-PNG/file.png",
+          requestedFilename: "PointNShoot-PNG/file.png",
+          imageBytes: 123,
+          width: 800,
+          height: 600,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isRenderImageResult({
+        ok: true,
+        imageDataUrl: "data:image/png;base64,abc",
+        imageBytes: 123,
+        width: 800,
+        height: 600,
+      }),
+    ).toBe(true);
+    expect(isCaptureResult({ ok: false, reason: "download-failed", fallback: { markdownPrompt: "# UI Note" } })).toBe(true);
+  });
+
   it("rejects malformed messages", () => {
     expect(isRuntimeMessage({ type: "OTHER" })).toBe(false);
     expect(isCaptureRequestMessage({ type: "POINTNSHOOT_CAPTURE_REQUEST", payload: { id: "x" } })).toBe(false);
     expect(isRenderRequestMessage({ type: "POINTNSHOOT_RENDER_REQUEST", payload: { request } })).toBe(false);
+    expect(isCaptureResult({ ok: true, copied: true })).toBe(false);
+    expect(isRenderImageResult({ ok: false, reason: "not-real", fallback: { markdownPrompt: "# UI Note" } })).toBe(false);
   });
 });

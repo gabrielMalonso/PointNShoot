@@ -17,8 +17,8 @@ describe("privacy helpers", () => {
   });
 
   it("redacts sensitive query parameters", () => {
-    expect(sanitizeUrl("https://example.com/path?token=abc&view=card&password=secret")).toBe(
-      "https://example.com/path?token=%5Bredigido%5D&view=card&password=%5Bredigido%5D",
+    expect(sanitizeUrl("https://example.com/path?token=abc&view=card&password=secret&membershipId=kh7827jayjbfe3nhm8zc97yctd84n3yt")).toBe(
+      "https://example.com/path?token=<redacted>&view=card&password=<redacted>&membershipId=<redacted>",
     );
   });
 });

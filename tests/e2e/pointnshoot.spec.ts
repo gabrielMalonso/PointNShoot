@@ -3,13 +3,12 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const contentScriptPath = fileURLToPath(new URL("../../dist/content/boot.js", import.meta.url));
-const tinyPng =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+const savedPath = "/Users/test/Downloads/PointNShoot-PNG/2026-05-25-1900-h1-capture1.png";
 
 test.beforeEach(async ({ page }) => {
   test.skip(!existsSync(contentScriptPath), "Run pnpm build before pnpm e2e.");
 
-  await page.addInitScript((imageDataUrl) => {
+  await page.addInitScript((imagePath) => {
     const browserWindow = window as any;
     const listeners: unknown[] = [];
     browserWindow.__lastPnsRequest = null;
@@ -20,27 +19,22 @@ test.beforeEach(async ({ page }) => {
         if (typeof listener === "function") listener(message);
       });
     };
-    browserWindow.__allowImageClipboard = false;
-    browserWindow.__clipboardWrites = [];
+    browserWindow.__blockTextClipboard = false;
     browserWindow.__clipboardText = "";
-    browserWindow.ClipboardItem = class ClipboardItem {
-      readonly items: Record<string, Blob>;
-
-      constructor(items: Record<string, Blob>) {
-        this.items = items;
-      }
-    };
+    browserWindow.__clipboardTextWrites = [];
+    browserWindow.__clipboardImageWrites = [];
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: {
         async write(items: unknown[]) {
-          if (!browserWindow.__allowImageClipboard) {
-            throw new DOMException("Document is not focused.", "NotAllowedError");
-          }
-          browserWindow.__clipboardWrites.push(items);
+          browserWindow.__clipboardImageWrites.push(items);
         },
         async writeText(text: string) {
+          if (browserWindow.__blockTextClipboard) {
+            throw new DOMException("Document is not focused.", "NotAllowedError");
+          }
           browserWindow.__clipboardText = text;
+          browserWindow.__clipboardTextWrites.push(text);
         },
       },
     });
@@ -58,29 +52,69 @@ test.beforeEach(async ({ page }) => {
         async sendMessage(message: unknown) {
           browserWindow.__lastPnsRequest = message;
           browserWindow.__pnsRequests.push(message);
-          return browserWindow.__pnsResponses.shift() ?? {
-            ok: false,
-            reason: "clipboard-blocked",
-            fallback: {
-              markdownPrompt: "# PointNShoot\n\nComentario: teste e2e",
-              imageDataUrl,
-              canSavePng: true,
+          return (
+            browserWindow.__pnsResponses.shift() ?? {
+              ok: true,
+              markdownPrompt: defaultUiNote(imagePath, "teste e2e"),
+              savedImage: {
+                downloadId: 7,
+                filename: imagePath,
+                requestedFilename: "PointNShoot-PNG/2026-05-25-1900-h1-capture1.png",
+                imageBytes: 1234,
+                width: 960,
+                height: 720,
+              },
               diagnostics: [
                 {
-                  at: "2026-05-25T17:05:00.000Z",
-                  scope: "offscreen",
-                  level: "error",
-                  step: "clipboard:write:error",
-                  message: "NotAllowedError: Failed to write image/png",
-                  details: { hasClipboardItem: true },
+                  at: "2026-05-25T17:20:00.000Z",
+                  scope: "background",
+                  level: "info",
+                  step: "download:complete",
+                  message: "PNG saved and absolute filename confirmed.",
                 },
               ],
-            },
-          };
+            }
+          );
         },
       },
     };
-  }, tinyPng);
+
+    function defaultUiNote(path: string, comment: string) {
+      return [
+        "# UI Note",
+        "",
+        "## Prompt",
+        "",
+        comment,
+        "",
+        "## Informacoes",
+        "",
+        "Imagem:",
+        `\`${path}\``,
+        "",
+        "URL:",
+        "`https://example.test/simple-page.html`",
+        "",
+        "Elemento selecionado:",
+        "`h1`",
+        "",
+        "Elemento no ponto:",
+        "`h1 [h1]`",
+        "",
+        "Texto:",
+        "`Ajuste fino de layout`",
+        "",
+        "Ponto:",
+        "`x=250 y=142`",
+        "",
+        "Rect:",
+        "`x=100 y=120 w=300 h=44 dpr=1`",
+        "",
+        "Pistas:",
+        "`position=static; z-index=auto; transform=none`",
+      ].join("\n");
+    }
+  }, savedPath);
 });
 
 test("toggles the persistent overlay and Pick mode separately", async ({ page }) => {
@@ -173,56 +207,11 @@ test("blocks page pointer and click handlers while Pick is active", async ({ pag
   await page.mouse.click(box!.x + 32, box!.y + 32);
 
   await expect(page.locator('textarea[aria-label="Comentario"]')).toBeVisible();
-  await expect
-    .poll(() => page.evaluate(() => (window as any).__pagePointerDownCount))
-    .toBe(0);
+  await expect.poll(() => page.evaluate(() => (window as any).__pagePointerDownCount)).toBe(0);
   await expect.poll(() => page.evaluate(() => (window as any).__pageClickCount)).toBe(0);
 });
 
-test("delegates PNG clipboard write to the focused tab after offscreen render", async ({ page }) => {
-  await page.goto(new URL("../fixtures/simple-page.html", import.meta.url).toString());
-  await page.addScriptTag({ path: contentScriptPath });
-  await page.evaluate((imageDataUrl) => {
-    (window as any).__allowImageClipboard = true;
-    (window as any).__pnsResponses.push({
-      ok: false,
-      reason: "clipboard-blocked",
-      fallback: {
-        markdownPrompt: "# PointNShoot\n\nComentario: teste delegado",
-        imageDataUrl,
-        canSavePng: true,
-        diagnostics: [
-          {
-            at: "2026-05-25T17:20:00.000Z",
-            scope: "offscreen",
-            level: "info",
-            step: "render:png",
-            message: "Annotated PNG rendered; clipboard copy delegated to focused tab.",
-          },
-        ],
-      },
-    });
-    window.__POINTNSHOOT_START__?.();
-  }, tinyPng);
-
-  const card = page.locator('[data-shot-target="spacing-card"]');
-  const box = await card.boundingBox();
-  expect(box).toBeTruthy();
-
-  await page.mouse.move(box!.x + 32, box!.y + 32);
-  await page.mouse.click(box!.x + 32, box!.y + 32);
-  await page.locator('textarea[aria-label="Comentario"]').fill("copiar via aba focada");
-  await page.getByRole("button", { name: "Copiar PNG" }).click();
-
-  await expect
-    .poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 })
-    .toBe(1);
-  await expect(page.locator('section[aria-label="Fallback"]')).toBeHidden({ timeout: 2_000 });
-  const request = await page.evaluate(() => (window as any).__lastPnsRequest);
-  expect(request.type).toBe("POINTNSHOOT_CAPTURE_REQUEST");
-});
-
-test("selects an element, submits a comment and opens fallback", async ({ page }) => {
+test("selects an element, saves the PNG result and copies the UI Note text", async ({ page }) => {
   await page.goto(new URL("../fixtures/simple-page.html", import.meta.url).toString());
   await page.addScriptTag({ path: contentScriptPath });
   await page.evaluate(() => window.__POINTNSHOOT_START__?.());
@@ -233,46 +222,111 @@ test("selects an element, submits a comment and opens fallback", async ({ page }
 
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
+  await page.locator('textarea[aria-label="Comentario"]').fill("Aumentar o respiro do cabecalho do card.");
+  await page.getByRole("button", { name: "Copiar" }).click();
 
-  const textarea = page.locator('textarea[aria-label="Comentario"]');
-  await expect(textarea).toBeVisible();
-  await textarea.fill("Aumentar o respiro do cabecalho do card.");
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+Enter" : "Control+Enter");
+  await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(1);
+  await expect.poll(() => page.evaluate(() => (window as any).__clipboardTextWrites.length), { timeout: 2_000 }).toBe(1);
+  await expect(page.locator('section[aria-label="Nota nao copiada"]')).toBeHidden({ timeout: 2_000 });
 
-  await expect(page.locator('section[aria-label="Fallback"]')).toBeVisible();
-  await expect(page.locator(".fallback-image")).toBeVisible();
-  await expect(page.getByText("Chrome bloqueou a copia automatica")).toBeVisible();
-  await expect(page.getByText("Detalhes tecnicos")).toBeVisible();
-  await expect(page.locator(".fallback-diagnostics")).toContainText("clipboard:write:error");
-  await expect(page.locator(".fallback-diagnostics")).toContainText("userActivationIsActive");
-  await expect(page.getByRole("button", { name: "Copiar PNG" })).toBeVisible();
-
-  await page.evaluate(() => {
-    (window as any).__allowImageClipboard = true;
-  });
-  await page.getByRole("button", { name: "Copiar PNG" }).click();
-  await expect
-    .poll(() => page.evaluate(() => (window as any).__clipboardWrites.length), { timeout: 2_000 })
-    .toBe(1);
-  await expect(page.locator('section[aria-label="Fallback"]')).toBeHidden({ timeout: 2_000 });
+  const clipboardText = await page.evaluate(() => (window as any).__clipboardText);
+  expect(clipboardText).toContain("# UI Note");
+  expect(clipboardText).toContain("PointNShoot-PNG");
+  expect(clipboardText).toContain(savedPath);
+  await expect.poll(() => page.evaluate(() => (window as any).__clipboardImageWrites.length)).toBe(0);
 
   const request = await page.evaluate(() => (window as any).__lastPnsRequest);
   expect(request.type).toBe("POINTNSHOOT_CAPTURE_REQUEST");
   expect(request.payload.comment).toContain("respiro");
   expect(request.payload.element.shortSelector).toBe("h1");
   expect(request.payload.element.cssPath).toContain("article.card.primary");
+  expect(request.payload.element.topElementAtPoint).toBeTruthy();
+});
+
+test("shows a manual fallback when writeText is blocked after the image is saved", async ({ page }) => {
+  await page.goto(new URL("../fixtures/simple-page.html", import.meta.url).toString());
+  await page.addScriptTag({ path: contentScriptPath });
+  await page.evaluate((imagePath) => {
+    (window as any).__blockTextClipboard = true;
+    (window as any).__pnsResponses.push({
+      ok: true,
+      markdownPrompt: `# UI Note\n\n## Prompt\n\nteste bloqueado\n\n## Informacoes\n\nImagem:\n\`${imagePath}\``,
+      savedImage: {
+        downloadId: 7,
+        filename: imagePath,
+        requestedFilename: "PointNShoot-PNG/2026-05-25-1900-h1-capture1.png",
+        imageBytes: 1234,
+        width: 960,
+        height: 720,
+      },
+      diagnostics: [
+        {
+          at: "2026-05-25T17:20:00.000Z",
+          scope: "background",
+          level: "info",
+          step: "download:complete",
+          message: "PNG saved and absolute filename confirmed.",
+        },
+      ],
+    });
+    window.__POINTNSHOOT_START__?.();
+  }, savedPath);
+
+  const card = page.locator('[data-shot-target="spacing-card"]');
+  const box = await card.boundingBox();
+  expect(box).toBeTruthy();
+
+  await page.mouse.move(box!.x + 32, box!.y + 32);
+  await page.mouse.click(box!.x + 32, box!.y + 32);
+  await page.locator('textarea[aria-label="Comentario"]').fill("clipboard bloqueado");
+  await page.getByRole("button", { name: "Copiar" }).click();
+
+  const fallback = page.locator('section[aria-label="Nota nao copiada"]');
+  await expect(fallback).toBeVisible();
+  await expect(page.getByText("A imagem foi salva, mas o Chrome bloqueou a copia da nota.")).toBeVisible();
+  await expect(page.locator(".fallback-text")).toContainText(savedPath);
+  await expect(page.locator(".fallback-diagnostics")).toContainText("clipboard:writeText:error");
+  await expect(page.getByRole("button", { name: "Copiar PNG" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Copiar texto" })).toHaveCount(0);
+  await expect(page.locator(".fallback-image")).toHaveCount(0);
+});
+
+test("empty comments still prevent submission", async ({ page }) => {
+  await page.goto(new URL("../fixtures/simple-page.html", import.meta.url).toString());
+  await page.addScriptTag({ path: contentScriptPath });
+  await page.evaluate(() => window.__POINTNSHOOT_START__?.());
+
+  const card = page.locator('[data-shot-target="spacing-card"]');
+  const box = await card.boundingBox();
+  expect(box).toBeTruthy();
+
+  await page.mouse.move(box!.x + 32, box!.y + 32);
+  await page.mouse.click(box!.x + 32, box!.y + 32);
+  await page.getByRole("button", { name: "Copiar" }).click();
+
+  await expect(page.getByText("Escreva um comentario antes de capturar.")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length)).toBe(0);
+  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeVisible();
 });
 
 test("successful copy can run twice after reinjection", async ({ page }) => {
   await page.goto(new URL("../fixtures/simple-page.html", import.meta.url).toString());
   await page.addScriptTag({ path: contentScriptPath });
-  await page.evaluate(() => {
+  await page.evaluate((imagePath) => {
     (window as any).__pnsResponses.push(
-      { ok: true, copied: true, imageBytes: 1024 },
-      { ok: true, copied: true, imageBytes: 2048 },
+      {
+        ok: true,
+        markdownPrompt: `# UI Note\n\n## Prompt\n\nprimeira copia\n\n## Informacoes\n\nImagem:\n\`${imagePath}\``,
+        savedImage: { downloadId: 7, filename: imagePath, requestedFilename: "PointNShoot-PNG/a.png", imageBytes: 1024, width: 960, height: 720 },
+      },
+      {
+        ok: true,
+        markdownPrompt: `# UI Note\n\n## Prompt\n\nsegunda copia\n\n## Informacoes\n\nImagem:\n\`${imagePath}\``,
+        savedImage: { downloadId: 8, filename: imagePath, requestedFilename: "PointNShoot-PNG/b.png", imageBytes: 2048, width: 960, height: 720 },
+      },
     );
     window.__POINTNSHOOT_START__?.();
-  });
+  }, savedPath);
 
   const card = page.locator('[data-shot-target="spacing-card"]');
   const box = await card.boundingBox();
@@ -281,10 +335,8 @@ test("successful copy can run twice after reinjection", async ({ page }) => {
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
   await page.locator('textarea[aria-label="Comentario"]').fill("primeira copia");
-  await page.getByRole("button", { name: "Copiar PNG" }).click();
-  await expect
-    .poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 })
-    .toBe(1);
+  await page.getByRole("button", { name: "Copiar" }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(1);
   await expect(page.getByRole("button", { name: "Pick" })).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator('textarea[aria-label="Comentario"]')).toBeHidden({ timeout: 2_000 });
 
@@ -294,10 +346,13 @@ test("successful copy can run twice after reinjection", async ({ page }) => {
   await page.mouse.click(box!.x + 42, box!.y + 42);
   await expect(page.locator('textarea[aria-label="Comentario"]')).toBeVisible();
   await page.locator('textarea[aria-label="Comentario"]').fill("segunda copia");
-  await page.getByRole("button", { name: "Copiar PNG" }).click();
-  await expect
-    .poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 })
-    .toBe(2);
+  await page.getByRole("button", { name: "Copiar" }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(2);
+
+  const writes = await page.evaluate(() => (window as any).__clipboardTextWrites);
+  expect(writes).toHaveLength(2);
+  expect(writes[0]).toContain("primeira copia");
+  expect(writes[1]).toContain("segunda copia");
 
   const requests = await page.evaluate(() => (window as any).__pnsRequests);
   expect(requests).toHaveLength(2);
@@ -317,9 +372,9 @@ test("copy and cancel buttons receive clicks inside the overlay", async ({ page 
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
   await page.locator('textarea[aria-label="Comentario"]').fill("quero deixar maior.");
-  await page.getByRole("button", { name: "Copiar PNG" }).click();
+  await page.getByRole("button", { name: "Copiar" }).click();
 
-  await expect(page.locator('section[aria-label="Fallback"]')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(1);
   const request = await page.evaluate(() => (window as any).__lastPnsRequest);
   expect(request.type).toBe("POINTNSHOOT_CAPTURE_REQUEST");
 

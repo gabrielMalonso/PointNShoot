@@ -1,4 +1,4 @@
-import type { CaptureRequest, PointNShootMessage, RenderRequestMessage, RuntimeMessage } from "./types";
+import type { CaptureResult, CaptureRequest, PointNShootMessage, RenderImageResult, RenderRequestMessage, RuntimeMessage } from "./types";
 
 export const MESSAGE_TYPES = {
   toggleOverlay: "POINTNSHOOT_TOGGLE_OVERLAY",
@@ -23,6 +23,31 @@ export function isRenderRequestMessage(value: unknown): value is RenderRequestMe
   return typeof value.payload.screenshotDataUrl === "string" && isCaptureRequest(value.payload.request);
 }
 
+export function isCaptureResult(value: unknown): value is CaptureResult {
+  if (!isRecord(value) || typeof value.ok !== "boolean") return false;
+
+  if (value.ok === true) {
+    return typeof value.markdownPrompt === "string" && isSavedImage(value.savedImage);
+  }
+
+  return isCaptureFailureReason(value.reason) && isCaptureFallback(value.fallback);
+}
+
+export function isRenderImageResult(value: unknown): value is RenderImageResult {
+  if (!isRecord(value) || typeof value.ok !== "boolean") return false;
+
+  if (value.ok === true) {
+    return (
+      typeof value.imageDataUrl === "string" &&
+      typeof value.imageBytes === "number" &&
+      typeof value.width === "number" &&
+      typeof value.height === "number"
+    );
+  }
+
+  return isCaptureFailureReason(value.reason) && isCaptureFallback(value.fallback);
+}
+
 function isCaptureRequest(value: unknown): value is CaptureRequest {
   return (
     isRecord(value) &&
@@ -31,6 +56,34 @@ function isCaptureRequest(value: unknown): value is CaptureRequest {
     (value.privacyMode === "normal" || value.privacyMode === "redact-sensitive") &&
     typeof value.createdAt === "string" &&
     isRecord(value.element)
+  );
+}
+
+function isCaptureFallback(value: unknown): boolean {
+  return isRecord(value) && typeof value.markdownPrompt === "string";
+}
+
+function isSavedImage(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.downloadId === "number" &&
+    typeof value.filename === "string" &&
+    typeof value.requestedFilename === "string" &&
+    typeof value.imageBytes === "number" &&
+    typeof value.width === "number" &&
+    typeof value.height === "number"
+  );
+}
+
+function isCaptureFailureReason(value: unknown): boolean {
+  return (
+    value === "capture-failed" ||
+    value === "render-failed" ||
+    value === "download-failed" ||
+    value === "clipboard-blocked" ||
+    value === "restricted-page" ||
+    value === "offscreen-unavailable" ||
+    value === "unknown"
   );
 }
 

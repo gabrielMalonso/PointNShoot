@@ -1,6 +1,6 @@
 import { redactAndTruncate, sanitizeUrl, truncateText } from "./privacy";
 import { describeParent, getCssPath, getElementClasses, getNthOfTypePath, getShortSelector } from "./selectors";
-import type { ElementContext, PrivacyMode, Rect, ViewportInfo } from "./types";
+import type { ElementContext, PrivacyMode, Rect, TopElementAtPoint, UsefulStyles, ViewportInfo } from "./types";
 
 export type BuildElementContextOptions = {
   privacyMode?: PrivacyMode;
@@ -12,6 +12,7 @@ export type BuildElementContextOptions = {
 export function buildElementContext(element: Element, options: BuildElementContextOptions = {}): ElementContext {
   const privacyMode = options.privacyMode ?? "redact-sensitive";
   const rect = domRectToRect(element.getBoundingClientRect());
+  const viewport = options.viewport ?? getViewportInfo();
   const visibleText = getVisibleText(element);
   const processedText = privacyMode === "redact-sensitive" ? redactAndTruncate(visibleText, 500) : truncateText(visibleText, 500);
   const url = options.url ?? globalThis.location?.href ?? "";
@@ -33,9 +34,11 @@ export function buildElementContext(element: Element, options: BuildElementConte
     siblingIndex: siblingStats.index,
     similarSiblingCount: siblingStats.count,
     boundingRect: rect,
-    viewport: options.viewport ?? getViewportInfo(),
+    viewport,
     url: processedUrl,
     pageTitle: options.title ?? globalThis.document?.title ?? "",
+    usefulStyles: getUsefulStyles(element),
+    topElementAtPoint: getTopElementAtPoint(rect, viewport, element.ownerDocument ?? globalThis.document),
   };
 }
 
@@ -66,6 +69,67 @@ export function domRectToRect(rect: DOMRect | DOMRectReadOnly): Rect {
 function getVisibleText(element: Element): string {
   const htmlElement = element as HTMLElement;
   return htmlElement.innerText ?? element.textContent ?? "";
+}
+
+function getUsefulStyles(element: Element): UsefulStyles {
+  const fallback: UsefulStyles = {
+    position: "",
+    zIndex: "",
+    display: "",
+    visibility: "",
+    opacity: "",
+    transform: "",
+    pointerEvents: "",
+    overflow: "",
+    isolation: "",
+  };
+
+  try {
+    const style = element.ownerDocument?.defaultView?.getComputedStyle(element);
+    if (!style) return fallback;
+
+    return {
+      position: style.position,
+      zIndex: style.zIndex,
+      display: style.display,
+      visibility: style.visibility,
+      opacity: style.opacity,
+      transform: style.transform,
+      pointerEvents: style.pointerEvents,
+      overflow: style.overflow,
+      isolation: style.isolation,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function getTopElementAtPoint(rect: Rect, viewport: ViewportInfo, ownerDocument: Document | undefined): TopElementAtPoint | null {
+  const visibleRect = intersectRects(rect, {
+    x: 0,
+    y: 0,
+    width: viewport.width,
+    height: viewport.height,
+  });
+
+  if (visibleRect.width <= 0 || visibleRect.height <= 0) return null;
+
+  const x = clamp(visibleRect.x + visibleRect.width / 2, 0, Math.max(0, viewport.width - 1));
+  const y = clamp(visibleRect.y + visibleRect.height / 2, 0, Math.max(0, viewport.height - 1));
+
+  try {
+    const topElement = ownerDocument?.elementFromPoint?.(x, y);
+    if (!topElement) return null;
+
+    return {
+      x,
+      y,
+      label: getElementLabel(topElement),
+      shortSelector: getShortSelector(topElement),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function getRole(element: Element): string | null {
@@ -129,4 +193,31 @@ function getSiblingStats(element: Element): { index: number; count: number } {
 
 function getSimilarityKey(element: Element): string {
   return `${element.tagName.toLowerCase()}|${getElementClasses(element, 3).sort().join(".")}`;
+}
+
+function getElementLabel(element: Element): string {
+  const tag = element.tagName.toLowerCase();
+  const id = element.id ? `#${element.id}` : "";
+  const classes = getElementClasses(element, 2)
+    .map((item) => `.${item}`)
+    .join("");
+  return `${tag}${id}${classes}`;
+}
+
+function intersectRects(a: Rect, b: Rect): Rect {
+  const x1 = Math.max(a.x, b.x);
+  const y1 = Math.max(a.y, b.y);
+  const x2 = Math.min(a.x + a.width, b.x + b.width);
+  const y2 = Math.min(a.y + a.height, b.y + b.height);
+
+  return {
+    x: x1,
+    y: y1,
+    width: Math.max(0, x2 - x1),
+    height: Math.max(0, y2 - y1),
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }

@@ -2,8 +2,9 @@ import { appendDiagnostic, errorDiagnostic, makeDiagnostic } from "../shared/dia
 import { clipboardCapabilityDetails } from "../shared/clipboard-diagnostics";
 import { toCaptureFailureReason } from "../shared/errors";
 import { isRenderRequestMessage } from "../shared/messages";
-import { buildMarkdownPrompt, renderAnnotatedPng } from "../shared/render-png";
-import type { CaptureResult, DiagnosticLogEntry, RenderRequestMessage } from "../shared/types";
+import { renderHighlightedPng } from "../shared/render-png";
+import type { DiagnosticLogEntry, RenderImageResult, RenderRequestMessage } from "../shared/types";
+import { buildUiNote } from "../shared/ui-note";
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   if (!isRenderRequestMessage(message)) return false;
@@ -20,20 +21,18 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
         ok: false,
         reason: toCaptureFailureReason(error),
         fallback: {
-          markdownPrompt: buildMarkdownPrompt(request),
-          canSavePng: false,
+          markdownPrompt: buildUiNote(request),
           diagnostics,
         },
-      } satisfies CaptureResult);
+      } satisfies RenderImageResult);
     });
 
   return true;
 });
 
-async function handleRender(message: RenderRequestMessage): Promise<CaptureResult> {
+async function handleRender(message: RenderRequestMessage): Promise<RenderImageResult> {
   const { request, screenshotDataUrl } = message.payload;
   let diagnostics: DiagnosticLogEntry[] = message.payload.diagnostics ?? [];
-  const markdownPrompt = buildMarkdownPrompt(request);
 
   diagnostics = appendDiagnostic(
     diagnostics,
@@ -44,10 +43,10 @@ async function handleRender(message: RenderRequestMessage): Promise<CaptureResul
     }),
   );
 
-  const rendered = await renderAnnotatedPng({ request, screenshotDataUrl });
+  const rendered = await renderHighlightedPng({ request, screenshotDataUrl });
   diagnostics = appendDiagnostic(
     diagnostics,
-    makeDiagnostic("offscreen", "info", "render:png", "Annotated PNG rendered; clipboard copy delegated to focused tab.", {
+    makeDiagnostic("offscreen", "info", "render:png", "Contextual PNG crop rendered.", {
       requestId: request.id,
       imageBytes: rendered.imageBytes,
       width: rendered.width,
@@ -57,13 +56,11 @@ async function handleRender(message: RenderRequestMessage): Promise<CaptureResul
   );
 
   return {
-    ok: false,
-    reason: "clipboard-blocked",
-    fallback: {
-      markdownPrompt,
-      imageDataUrl: rendered.dataUrl,
-      canSavePng: true,
-      diagnostics,
-    },
+    ok: true,
+    imageDataUrl: rendered.dataUrl,
+    imageBytes: rendered.imageBytes,
+    width: rendered.width,
+    height: rendered.height,
+    diagnostics,
   };
 }

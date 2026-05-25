@@ -5,6 +5,7 @@ export function toCaptureFailureReason(error: unknown): CaptureFailureReason {
 
   if (/restricted|cannot access|chrome:\/\//i.test(message)) return "restricted-page";
   if (/clipboard|permission denied|notallowed/i.test(message)) return "clipboard-blocked";
+  if (/download/i.test(message)) return "download-failed";
   if (/offscreen/i.test(message)) return "offscreen-unavailable";
   if (/render|canvas|image/i.test(message)) return "render-failed";
   if (/capture/i.test(message)) return "capture-failed";
@@ -18,6 +19,8 @@ export function captureFailureLabel(reason: CaptureFailureReason): string {
       return "A captura da aba falhou.";
     case "render-failed":
       return "A montagem do PNG falhou.";
+    case "download-failed":
+      return "O download do PNG falhou.";
     case "clipboard-blocked":
       return "O Chrome bloqueou a copia para o clipboard.";
     case "restricted-page":

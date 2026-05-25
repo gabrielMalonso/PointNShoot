@@ -18,6 +18,25 @@ export type ViewportInfo = {
 
 export type PrivacyMode = "normal" | "redact-sensitive";
 
+export type UsefulStyles = {
+  position: string;
+  zIndex: string;
+  display: string;
+  visibility: string;
+  opacity: string;
+  transform: string;
+  pointerEvents: string;
+  overflow: string;
+  isolation: string;
+};
+
+export type TopElementAtPoint = {
+  x: number;
+  y: number;
+  label: string;
+  shortSelector: string;
+};
+
 export type ElementContext = {
   tagName: string;
   id: string | null;
@@ -36,6 +55,8 @@ export type ElementContext = {
   viewport: ViewportInfo;
   url: string;
   pageTitle: string;
+  usefulStyles: UsefulStyles;
+  topElementAtPoint: TopElementAtPoint | null;
 };
 
 export type CaptureRequest = {
@@ -49,6 +70,7 @@ export type CaptureRequest = {
 export type CaptureFailureReason =
   | "capture-failed"
   | "render-failed"
+  | "download-failed"
   | "clipboard-blocked"
   | "restricted-page"
   | "offscreen-unavailable"
@@ -56,13 +78,43 @@ export type CaptureFailureReason =
 
 export type CaptureFallback = {
   markdownPrompt: string;
-  imageDataUrl?: string;
-  canSavePng: boolean;
   diagnostics?: DiagnosticLogEntry[];
 };
 
-export type CaptureResult =
-  | { ok: true; copied: true; imageBytes: number }
+export type SavedImage = {
+  downloadId: number;
+  filename: string;
+  requestedFilename: string;
+  imageBytes: number;
+  width: number;
+  height: number;
+};
+
+export type CaptureSuccess = {
+  ok: true;
+  markdownPrompt: string;
+  savedImage: SavedImage;
+  diagnostics?: DiagnosticLogEntry[];
+};
+
+export type CaptureFailure = {
+  ok: false;
+  reason: CaptureFailureReason;
+  fallback: CaptureFallback;
+  diagnostics?: DiagnosticLogEntry[];
+};
+
+export type CaptureResult = CaptureSuccess | CaptureFailure;
+
+export type RenderImageResult =
+  | {
+      ok: true;
+      imageDataUrl: string;
+      imageBytes: number;
+      width: number;
+      height: number;
+      diagnostics?: DiagnosticLogEntry[];
+    }
   | { ok: false; reason: CaptureFailureReason; fallback: CaptureFallback };
 
 export type DiagnosticLogEntry = {

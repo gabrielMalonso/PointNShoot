@@ -10,6 +10,6 @@ describe("PointNShoot shadow root", () => {
     expect(host.id).toBe(ROOT_ID);
     expect(host.shadowRoot).toBe(shadow);
     expect(refs.textarea.getAttribute("aria-label")).toBe("Comentario");
-    expect(refs.primaryButton.textContent).toBe("Copiar PNG");
+    expect(refs.primaryButton.textContent).toBe("Copiar");
   });
 });

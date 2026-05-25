@@ -3,11 +3,11 @@ import { getCssPath, getNthOfTypePath, getShortSelector } from "../../src/shared
 
 describe("selector helpers", () => {
   it("builds a compact selector from tag id and classes", () => {
-    document.body.innerHTML = `<button id="save-now" class="primary cta large">Salvar</button>`;
-    const button = document.querySelector("button");
+    document.body.innerHTML = `<div id="save-now" class="primary cta large">Salvar</div>`;
+    const button = document.querySelector("div");
 
     expect(button).toBeTruthy();
-    expect(getShortSelector(button!)).toBe("button#save-now.primary.cta.large");
+    expect(getShortSelector(button!)).toBe("div#save-now");
   });
 
   it("builds structural paths when no id is available", () => {
@@ -31,17 +31,25 @@ describe("selector helpers", () => {
       <main>
         <section data-component="AgendaToolbar">
           <button data-testid="agenda-view-week" class="h-9 rounded-md px-4">Semana</button>
+          <button data-slot="next-button" class="h-9 rounded-md px-4">Proxima</button>
+          <button role="button" class="ghost">Hoje</button>
           <span class="text-[1.65rem] font-semibold leading-none">25</span>
         </section>
       </main>
     `;
     const button = document.querySelector("button");
+    const slotButton = document.querySelector('[data-slot="next-button"]');
+    const roleButton = document.querySelector('[role="button"]');
     const span = document.querySelector("span");
 
     expect(button).toBeTruthy();
+    expect(slotButton).toBeTruthy();
+    expect(roleButton).toBeTruthy();
     expect(span).toBeTruthy();
     expect(getShortSelector(button!)).toBe('button[data-testid="agenda-view-week"]');
-    expect(getShortSelector(span!)).toBe('section[data-component="AgendaToolbar"]');
+    expect(getShortSelector(slotButton!)).toBe('button[data-slot="next-button"]');
+    expect(getShortSelector(roleButton!)).toBe('button[role="button"][name="Hoje"]');
+    expect(getShortSelector(span!)).toBe("span.font-semibold.leading-none");
     expect(getCssPath(span!)).toContain('section[data-component="AgendaToolbar"] > span');
   });
 });
