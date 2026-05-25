@@ -17,10 +17,10 @@ export function buildUiNote(request: CaptureRequest, options: BuildUiNoteOptions
     "",
     textBlock(comment, 500),
     "",
-    "## Informacoes",
+    "## Informações",
     "",
     "Imagem:",
-    code(options.imagePath ?? "(imagem nao salva)"),
+    code(options.imagePath ?? "(imagem não salva)"),
     "",
     "URL:",
     code(url),
@@ -32,7 +32,7 @@ export function buildUiNote(request: CaptureRequest, options: BuildUiNoteOptions
     code(formatTopElementAtPoint(element)),
     "",
     "Texto:",
-    code(element.visibleTextPreview || element.visibleText || "(sem texto visivel)"),
+    code(element.visibleTextPreview || element.visibleText || "(sem texto visível)"),
     "",
     "Ponto:",
     code(formatPoint(element)),
@@ -53,10 +53,10 @@ export function buildMinimalUiNote(comment: string): string {
     "",
     textBlock(comment, 500),
     "",
-    "## Informacoes",
+    "## Informações",
     "",
     "Imagem:",
-    code("(imagem nao salva)"),
+    code("(imagem não salva)"),
   ].join("\n");
 }
 
@@ -78,13 +78,13 @@ function formatHints(element: ElementContext): string {
 
 function formatTopElementAtPoint(element: ElementContext): string {
   const top = element.topElementAtPoint;
-  if (!top) return "(sem area visivel)";
+  if (!top) return "(sem área visível)";
   return `${top.label} [${top.shortSelector}]`;
 }
 
 function formatPoint(element: ElementContext): string {
   const top = element.topElementAtPoint;
-  if (!top) return "x=(sem area visivel) y=(sem area visivel)";
+  if (!top) return "x=(sem área visível) y=(sem área visível)";
   return `x=${round(top.x)} y=${round(top.y)}`;
 }
 

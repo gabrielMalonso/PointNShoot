@@ -154,7 +154,7 @@ export function showFallback(refs: OverlayRefs, fallback: CaptureFallback, handl
   const clipboardBlocked = diagnostics.includes("clipboard:writeText:error");
   const diagnosticsBlock = diagnostics
     ? `<details class="fallback-diagnostics" open>
-        <summary>Detalhes tecnicos</summary>
+        <summary>Detalhes técnicos</summary>
         <pre>${escapeHtml(diagnostics)}</pre>
       </details>`
     : "";

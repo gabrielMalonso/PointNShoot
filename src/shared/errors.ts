@@ -22,11 +22,11 @@ export function captureFailureLabel(reason: CaptureFailureReason): string {
     case "download-failed":
       return "O download do PNG falhou.";
     case "clipboard-blocked":
-      return "O Chrome bloqueou a copia para o clipboard.";
+      return "O Chrome bloqueou a cópia para o clipboard.";
     case "restricted-page":
-      return "Esta pagina nao permite injecao de extensoes.";
+      return "Esta página não permite injeção de extensões.";
     case "offscreen-unavailable":
-      return "O documento offscreen da extensao nao ficou disponivel.";
+      return "O documento offscreen da extensão não ficou disponível.";
     case "unknown":
       return "Erro desconhecido.";
   }

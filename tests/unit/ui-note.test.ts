@@ -62,8 +62,8 @@ describe("buildUiNote", () => {
 
     expect(note).toContain("# UI Note");
     expect(note).toContain("## Prompt\n\nmover CTA para cima");
-    expect(note).toContain("## Informacoes\n\nImagem:");
-    expect(note).not.toContain("Comentario:");
+    expect(note).toContain("## Informações\n\nImagem:");
+    expect(note).not.toContain("Comentário:");
     expect(note).toContain("`/Users/test/Downloads/PointNShoot-PNG/2026-05-25-1900-button-buy-capture1.png`");
     expect(note).toContain("token=<redacted>");
     expect(note).toContain("membershipId=<redacted>");
@@ -81,7 +81,7 @@ describe("buildUiNote", () => {
   it("does not invent an image path when none was confirmed", () => {
     const note = buildUiNote(request);
 
-    expect(note).toContain("## Informacoes\n\nImagem:\n`(imagem nao salva)`");
+    expect(note).toContain("## Informações\n\nImagem:\n`(imagem não salva)`");
     expect(note).not.toContain("PointNShoot-PNG/");
   });
 });

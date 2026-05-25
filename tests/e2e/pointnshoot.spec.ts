@@ -87,7 +87,7 @@ test.beforeEach(async ({ page }) => {
         "",
         comment,
         "",
-        "## Informacoes",
+        "## Informações",
         "",
         "Imagem:",
         `\`${path}\``,
@@ -125,7 +125,7 @@ test("toggles the persistent overlay and Pick mode separately", async ({ page })
   const pickButton = page.getByRole("button", { name: "Pick" });
   await expect(pickButton).toBeVisible();
   await expect(pickButton).toHaveAttribute("aria-pressed", "false");
-  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeHidden();
+  await expect(page.locator('textarea[aria-label="Comentário"]')).toBeHidden();
 
   await pickButton.click();
   await expect(pickButton).toHaveAttribute("aria-pressed", "true");
@@ -135,12 +135,12 @@ test("toggles the persistent overlay and Pick mode separately", async ({ page })
   expect(box).toBeTruthy();
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
-  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeVisible();
+  await expect(page.locator('textarea[aria-label="Comentário"]')).toBeVisible();
 
   await pickButton.click();
   await expect(pickButton).toBeVisible();
   await expect(pickButton).toHaveAttribute("aria-pressed", "false");
-  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeHidden();
+  await expect(page.locator('textarea[aria-label="Comentário"]')).toBeHidden();
 
   await page.getByRole("button", { name: "Fechar overlay" }).click();
   await expect(pickButton).toBeHidden();
@@ -157,7 +157,7 @@ test("runtime toggle message opens and closes the overlay without starting Pick"
   const pickButton = page.getByRole("button", { name: "Pick" });
   await expect(pickButton).toBeVisible();
   await expect(pickButton).toHaveAttribute("aria-pressed", "false");
-  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeHidden();
+  await expect(page.locator('textarea[aria-label="Comentário"]')).toBeHidden();
 
   await page.evaluate(() => {
     (window as any).__emitPnsRuntimeMessage({ type: "POINTNSHOOT_TOGGLE_OVERLAY" });
@@ -206,7 +206,7 @@ test("blocks page pointer and click handlers while Pick is active", async ({ pag
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
 
-  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeVisible();
+  await expect(page.locator('textarea[aria-label="Comentário"]')).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as any).__pagePointerDownCount)).toBe(0);
   await expect.poll(() => page.evaluate(() => (window as any).__pageClickCount)).toBe(0);
 });
@@ -222,12 +222,12 @@ test("selects an element, saves the PNG result and copies the UI Note text", asy
 
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
-  await page.locator('textarea[aria-label="Comentario"]').fill("Aumentar o respiro do cabecalho do card.");
+  await page.locator('textarea[aria-label="Comentário"]').fill("Aumentar o respiro do cabecalho do card.");
   await page.getByRole("button", { name: "Copiar" }).click();
 
   await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(1);
   await expect.poll(() => page.evaluate(() => (window as any).__clipboardTextWrites.length), { timeout: 2_000 }).toBe(1);
-  await expect(page.locator('section[aria-label="Nota nao copiada"]')).toBeHidden({ timeout: 2_000 });
+  await expect(page.locator('section[aria-label="Nota não copiada"]')).toBeHidden({ timeout: 2_000 });
 
   const clipboardText = await page.evaluate(() => (window as any).__clipboardText);
   expect(clipboardText).toContain("# UI Note");
@@ -250,7 +250,7 @@ test("shows a manual fallback when writeText is blocked after the image is saved
     (window as any).__blockTextClipboard = true;
     (window as any).__pnsResponses.push({
       ok: true,
-      markdownPrompt: `# UI Note\n\n## Prompt\n\nteste bloqueado\n\n## Informacoes\n\nImagem:\n\`${imagePath}\``,
+      markdownPrompt: `# UI Note\n\n## Prompt\n\nteste bloqueado\n\n## Informações\n\nImagem:\n\`${imagePath}\``,
       savedImage: {
         downloadId: 7,
         filename: imagePath,
@@ -278,12 +278,12 @@ test("shows a manual fallback when writeText is blocked after the image is saved
 
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
-  await page.locator('textarea[aria-label="Comentario"]').fill("clipboard bloqueado");
+  await page.locator('textarea[aria-label="Comentário"]').fill("clipboard bloqueado");
   await page.getByRole("button", { name: "Copiar" }).click();
 
-  const fallback = page.locator('section[aria-label="Nota nao copiada"]');
+  const fallback = page.locator('section[aria-label="Nota não copiada"]');
   await expect(fallback).toBeVisible();
-  await expect(page.getByText("A imagem foi salva, mas o Chrome bloqueou a copia da nota.")).toBeVisible();
+  await expect(page.getByText("A imagem foi salva, mas o Chrome bloqueou a cópia da nota.")).toBeVisible();
   await expect(page.locator(".fallback-text")).toContainText(savedPath);
   await expect(page.locator(".fallback-diagnostics")).toContainText("clipboard:writeText:error");
   await expect(page.getByRole("button", { name: "Copiar PNG" })).toHaveCount(0);
@@ -304,9 +304,9 @@ test("empty comments still prevent submission", async ({ page }) => {
   await page.mouse.click(box!.x + 32, box!.y + 32);
   await page.getByRole("button", { name: "Copiar" }).click();
 
-  await expect(page.getByText("Escreva um comentario antes de capturar.")).toBeVisible();
+  await expect(page.getByText("Escreva um comentário antes de capturar.")).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length)).toBe(0);
-  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeVisible();
+  await expect(page.locator('textarea[aria-label="Comentário"]')).toBeVisible();
 });
 
 test("successful copy can run twice after reinjection", async ({ page }) => {
@@ -316,12 +316,12 @@ test("successful copy can run twice after reinjection", async ({ page }) => {
     (window as any).__pnsResponses.push(
       {
         ok: true,
-        markdownPrompt: `# UI Note\n\n## Prompt\n\nprimeira copia\n\n## Informacoes\n\nImagem:\n\`${imagePath}\``,
+        markdownPrompt: `# UI Note\n\n## Prompt\n\nprimeira copia\n\n## Informações\n\nImagem:\n\`${imagePath}\``,
         savedImage: { downloadId: 7, filename: imagePath, requestedFilename: "PointNShoot-PNG/a.png", imageBytes: 1024, width: 960, height: 720 },
       },
       {
         ok: true,
-        markdownPrompt: `# UI Note\n\n## Prompt\n\nsegunda copia\n\n## Informacoes\n\nImagem:\n\`${imagePath}\``,
+        markdownPrompt: `# UI Note\n\n## Prompt\n\nsegunda copia\n\n## Informações\n\nImagem:\n\`${imagePath}\``,
         savedImage: { downloadId: 8, filename: imagePath, requestedFilename: "PointNShoot-PNG/b.png", imageBytes: 2048, width: 960, height: 720 },
       },
     );
@@ -334,18 +334,18 @@ test("successful copy can run twice after reinjection", async ({ page }) => {
 
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
-  await page.locator('textarea[aria-label="Comentario"]').fill("primeira copia");
+  await page.locator('textarea[aria-label="Comentário"]').fill("primeira copia");
   await page.getByRole("button", { name: "Copiar" }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(1);
   await expect(page.getByRole("button", { name: "Pick" })).toHaveAttribute("aria-pressed", "false");
-  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeHidden({ timeout: 2_000 });
+  await expect(page.locator('textarea[aria-label="Comentário"]')).toBeHidden({ timeout: 2_000 });
 
   await page.addScriptTag({ path: contentScriptPath });
   await page.evaluate(() => window.__POINTNSHOOT_START__?.());
   await page.mouse.move(box!.x + 42, box!.y + 42);
   await page.mouse.click(box!.x + 42, box!.y + 42);
-  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeVisible();
-  await page.locator('textarea[aria-label="Comentario"]').fill("segunda copia");
+  await expect(page.locator('textarea[aria-label="Comentário"]')).toBeVisible();
+  await page.locator('textarea[aria-label="Comentário"]').fill("segunda copia");
   await page.getByRole("button", { name: "Copiar" }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(2);
 
@@ -371,7 +371,7 @@ test("copy and cancel buttons receive clicks inside the overlay", async ({ page 
 
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
-  await page.locator('textarea[aria-label="Comentario"]').fill("quero deixar maior.");
+  await page.locator('textarea[aria-label="Comentário"]').fill("quero deixar maior.");
   await page.getByRole("button", { name: "Copiar" }).click();
 
   await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(1);
@@ -383,7 +383,7 @@ test("copy and cancel buttons receive clicks inside the overlay", async ({ page 
   await page.mouse.click(box!.x + 32, box!.y + 32);
   await page.getByRole("button", { name: "Cancelar" }).click();
 
-  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeHidden();
+  await expect(page.locator('textarea[aria-label="Comentário"]')).toBeHidden();
 });
 
 test("focus inside the comment box does not close an existing modal", async ({ page }) => {
@@ -397,7 +397,7 @@ test("focus inside the comment box does not close an existing modal", async ({ p
 
   await page.mouse.move(box!.x + 8, box!.y + 8);
   await page.mouse.click(box!.x + 8, box!.y + 8);
-  await page.locator('textarea[aria-label="Comentario"]').fill("Texto no modal ainda deve permanecer aberto.");
+  await page.locator('textarea[aria-label="Comentário"]').fill("Texto no modal ainda deve permanecer aberto.");
 
   await expect(page.locator('[data-testid="modal"]')).toBeVisible();
 });

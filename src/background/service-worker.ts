@@ -36,7 +36,7 @@ async function activateTab(tab: chrome.tabs.Tab): Promise<void> {
   if (!tab.id) return;
 
   if (isRestrictedUrl(tab.url)) {
-    await markTabBlocked(tab.id, "Pagina restrita");
+    await markTabBlocked(tab.id, "Página restrita");
     return;
   }
 
@@ -49,7 +49,7 @@ async function activateTab(tab: chrome.tabs.Tab): Promise<void> {
     await clearTabBadge(tab.id);
   } catch (error) {
     console.warn("[PointNShoot] activation failed", error);
-    await markTabBlocked(tab.id, "Nao foi possivel ativar");
+    await markTabBlocked(tab.id, "Não foi possível ativar");
   }
 }
 
