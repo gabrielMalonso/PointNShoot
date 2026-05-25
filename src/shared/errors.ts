@@ -1,0 +1,30 @@
+import type { CaptureFailureReason } from "./types";
+
+export function toCaptureFailureReason(error: unknown): CaptureFailureReason {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+
+  if (/restricted|cannot access|chrome:\/\//i.test(message)) return "restricted-page";
+  if (/clipboard|permission denied|notallowed/i.test(message)) return "clipboard-blocked";
+  if (/offscreen/i.test(message)) return "offscreen-unavailable";
+  if (/render|canvas|image/i.test(message)) return "render-failed";
+  if (/capture/i.test(message)) return "capture-failed";
+
+  return "unknown";
+}
+
+export function captureFailureLabel(reason: CaptureFailureReason): string {
+  switch (reason) {
+    case "capture-failed":
+      return "A captura da aba falhou.";
+    case "render-failed":
+      return "A montagem do PNG falhou.";
+    case "clipboard-blocked":
+      return "O Chrome bloqueou a copia para o clipboard.";
+    case "restricted-page":
+      return "Esta pagina nao permite injecao de extensoes.";
+    case "offscreen-unavailable":
+      return "O documento offscreen da extensao nao ficou disponivel.";
+    case "unknown":
+      return "Erro desconhecido.";
+  }
+}

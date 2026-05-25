@@ -1,0 +1,30 @@
+export const COPY = {
+  actionTitle: "PointNShoot",
+  selectHint: "Selecione um elemento",
+  cancel: "Cancelar",
+  capture: "Copiar PNG",
+  hudTitle: "PointNShoot",
+  pick: "Pick",
+  closeOverlay: "Fechar overlay",
+  commentLabel: "Comentario",
+  commentPlaceholder: "O que voce quer mudar aqui?",
+  emptyComment: "Escreva um comentario antes de capturar.",
+  copied: "PNG copiado para o clipboard.",
+  captureFailed: "Nao foi possivel copiar o PNG.",
+  fallbackTitle: "Fallback",
+  fallbackClipboardBlocked: "Chrome bloqueou a copia automatica. Clique em Copiar PNG para tentar de novo.",
+  savePng: "Salvar PNG",
+  copyPng: "Copiar PNG",
+  copyText: "Copiar texto",
+  copiedText: "Texto copiado.",
+  restrictedPage: "Pagina restrita para extensoes Chrome.",
+  reselect: "Voltar para selecao",
+} as const;
+
+export const SHORTCUTS = {
+  toggleOverlay: "Alt+A",
+  submit: "Cmd+Enter",
+  submitAlt: "Ctrl+Enter",
+  cancel: "Esc",
+  reselect: "Backspace",
+} as const;

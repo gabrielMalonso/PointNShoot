@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "PointNShoot",
+  "description": "Selecione um elemento, anote e copie um screenshot para usar com agentes de codigo.",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "PointNShoot"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "offscreen",
+    "clipboardWrite"
+  ],
+  "commands": {
+    "toggle-pointnshoot": {
+      "suggested_key": {
+        "default": "Alt+A",
+        "mac": "Alt+A"
+      },
+      "description": "Ativar selecao do PointNShoot"
+    }
+  }
+}
