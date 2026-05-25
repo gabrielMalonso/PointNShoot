@@ -38,6 +38,8 @@ export function errorDiagnostic(
 }
 
 export function logDiagnostic(entry: DiagnosticLogEntry): void {
+  if (entry.level === "info") return;
+
   const method = entry.level === "error" ? console.error : console.warn;
   method("[PointNShoot]", entry.step, entry.message, entry.details ?? {});
 }
