@@ -22,7 +22,7 @@
         "default": "Alt+A",
         "mac": "Alt+A"
       },
-      "description": "Ativar selecao do PointNShoot"
+      "description": "Abrir ou fechar o overlay do PointNShoot"
     }
   }
 }

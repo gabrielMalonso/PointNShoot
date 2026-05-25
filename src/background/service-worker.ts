@@ -44,7 +44,7 @@ async function activateTab(tab: chrome.tabs.Tab): Promise<void> {
       target: { tabId: tab.id },
       files: ["content/boot.js"],
     });
-    await chrome.tabs.sendMessage(tab.id, { type: MESSAGE_TYPES.startPicking });
+    await chrome.tabs.sendMessage(tab.id, { type: MESSAGE_TYPES.toggleOverlay });
     await clearTabBadge(tab.id);
   } catch (error) {
     console.warn("[PointNShoot] activation failed", error);

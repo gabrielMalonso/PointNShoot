@@ -4,6 +4,7 @@ import type { CaptureFallback, Rect } from "../shared/types";
 
 export type OverlayRefs = {
   host: HTMLElement;
+  eventShield: HTMLDivElement;
   hud: HTMLElement;
   hudPickButton: HTMLButtonElement;
   hudCloseButton: HTMLButtonElement;
@@ -28,6 +29,7 @@ export type FallbackHandlers = {
 export function renderOverlayChrome(shadow: ShadowRoot): OverlayRefs {
   shadow.innerHTML = `
     <style>${overlayCss()}</style>
+    <div class="event-shield" part="event-shield" data-testid="pointnshoot-event-shield"></div>
     <nav class="hud" part="hud" aria-label="${COPY.hudTitle}" data-testid="pointnshoot-hud">
       <span class="hud-mark" aria-hidden="true">/</span>
       <button class="hud-pick" type="button" aria-pressed="false" data-testid="pointnshoot-pick">
@@ -56,6 +58,7 @@ export function renderOverlayChrome(shadow: ShadowRoot): OverlayRefs {
   const host = shadow.host as HTMLElement;
   return {
     host,
+    eventShield: mustFind<HTMLDivElement>(shadow, ".event-shield"),
     hud: mustFind<HTMLElement>(shadow, ".hud"),
     hudPickButton: mustFind<HTMLButtonElement>(shadow, ".hud-pick"),
     hudCloseButton: mustFind<HTMLButtonElement>(shadow, ".hud-close"),
@@ -86,6 +89,11 @@ export function hideHud(refs: OverlayRefs): void {
 export function setPickActive(refs: OverlayRefs, active: boolean): void {
   refs.hudPickButton.setAttribute("aria-pressed", String(active));
   refs.hudPickButton.classList.toggle("is-active", active);
+}
+
+export function setPageInteractionBlocked(refs: OverlayRefs, blocked: boolean): void {
+  refs.eventShield.style.display = blocked ? "block" : "none";
+  refs.eventShield.style.pointerEvents = blocked ? "auto" : "none";
 }
 
 export function showPanel(refs: OverlayRefs, rect: Rect): void {
@@ -224,6 +232,15 @@ function overlayCss(): string {
 
     * { box-sizing: border-box; }
 
+    .event-shield {
+      position: fixed;
+      inset: 0;
+      display: none;
+      pointer-events: none;
+      background: transparent;
+      z-index: 0;
+    }
+
     .hud {
       position: fixed;
       left: 50%;
@@ -240,6 +257,7 @@ function overlayCss(): string {
       color: #f4f9ff;
       padding: 4px;
       pointer-events: auto;
+      z-index: 4;
       box-shadow: 0 18px 46px rgba(7, 24, 39, 0.32), 0 2px 10px rgba(7, 24, 39, 0.22);
       transition: opacity 140ms ease;
     }
@@ -324,6 +342,7 @@ function overlayCss(): string {
       left: 0;
       display: none;
       pointer-events: none;
+      z-index: 2;
       border-radius: 4px;
       transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1), opacity 120ms ease;
     }
@@ -348,6 +367,7 @@ function overlayCss(): string {
       text-overflow: ellipsis;
       white-space: nowrap;
       pointer-events: none;
+      z-index: 3;
       background: var(--pns-ink);
       color: #fffaf5;
       border: 1px solid rgba(255, 250, 245, 0.2);
@@ -368,6 +388,7 @@ function overlayCss(): string {
       border: 1px solid var(--pns-line);
       border-radius: 8px;
       box-shadow: 0 18px 50px rgba(36, 21, 30, 0.22), 0 3px 12px rgba(36, 21, 30, 0.12);
+      z-index: 5;
     }
 
     .panel {

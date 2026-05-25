@@ -14,12 +14,13 @@ Depois, abra `chrome://extensions`, ative o modo de desenvolvedor e carregue a p
 ## Fluxo
 
 1. Abra uma pagina web.
-2. Clique no icone da extensao ou use `Alt+A`.
-3. Passe o mouse sobre um elemento.
-4. Clique para travar a selecao.
-5. Escreva o comentario.
-6. Pressione `Cmd+Enter`.
-7. Cole o PNG no agente de codigo.
+2. Clique no icone da extensao ou use `Alt+A` para abrir o overlay.
+3. Clique em `Pick` para ligar a selecao.
+4. Passe o mouse sobre um elemento.
+5. Clique para travar a selecao.
+6. Escreva o comentario.
+7. Pressione `Cmd+Enter`.
+8. Cole o PNG no agente de codigo.
 
 Se a copia do PNG for bloqueada, PointNShoot abre um fallback com preview, botao de salvar PNG e texto markdown copiavel.
 

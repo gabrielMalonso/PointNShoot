@@ -15,6 +15,11 @@ test.beforeEach(async ({ page }) => {
     browserWindow.__lastPnsRequest = null;
     browserWindow.__pnsRequests = [];
     browserWindow.__pnsResponses = [];
+    browserWindow.__emitPnsRuntimeMessage = (message: unknown) => {
+      listeners.forEach((listener) => {
+        if (typeof listener === "function") listener(message);
+      });
+    };
     browserWindow.__allowImageClipboard = false;
     browserWindow.__clipboardWrites = [];
     browserWindow.__clipboardText = "";
@@ -76,6 +81,102 @@ test.beforeEach(async ({ page }) => {
       },
     };
   }, tinyPng);
+});
+
+test("toggles the persistent overlay and Pick mode separately", async ({ page }) => {
+  await page.goto(new URL("../fixtures/simple-page.html", import.meta.url).toString());
+  await page.addScriptTag({ path: contentScriptPath });
+  await page.evaluate(() => window.__POINTNSHOOT_TOGGLE_OVERLAY__?.());
+
+  const pickButton = page.getByRole("button", { name: "Pick" });
+  await expect(pickButton).toBeVisible();
+  await expect(pickButton).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeHidden();
+
+  await pickButton.click();
+  await expect(pickButton).toHaveAttribute("aria-pressed", "true");
+
+  const card = page.locator('[data-shot-target="spacing-card"]');
+  const box = await card.boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.move(box!.x + 32, box!.y + 32);
+  await page.mouse.click(box!.x + 32, box!.y + 32);
+  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeVisible();
+
+  await pickButton.click();
+  await expect(pickButton).toBeVisible();
+  await expect(pickButton).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeHidden();
+
+  await page.getByRole("button", { name: "Fechar overlay" }).click();
+  await expect(pickButton).toBeHidden();
+});
+
+test("runtime toggle message opens and closes the overlay without starting Pick", async ({ page }) => {
+  await page.goto(new URL("../fixtures/simple-page.html", import.meta.url).toString());
+  await page.addScriptTag({ path: contentScriptPath });
+
+  await page.evaluate(() => {
+    (window as any).__emitPnsRuntimeMessage({ type: "POINTNSHOOT_TOGGLE_OVERLAY" });
+  });
+
+  const pickButton = page.getByRole("button", { name: "Pick" });
+  await expect(pickButton).toBeVisible();
+  await expect(pickButton).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeHidden();
+
+  await page.evaluate(() => {
+    (window as any).__emitPnsRuntimeMessage({ type: "POINTNSHOOT_TOGGLE_OVERLAY" });
+  });
+
+  await expect(pickButton).toBeHidden();
+});
+
+test("blocks page pointer and click handlers while Pick is active", async ({ page }) => {
+  await page.goto(new URL("../fixtures/simple-page.html", import.meta.url).toString());
+  await page.evaluate(() => {
+    (window as any).__pagePointerDownCount = 0;
+    (window as any).__pageClickCount = 0;
+    const isInsideCard = (event: MouseEvent | PointerEvent) => {
+      const rect = document.querySelector('[data-shot-target="spacing-card"]')?.getBoundingClientRect();
+      return Boolean(
+        rect &&
+          event.clientX >= rect.left &&
+          event.clientX <= rect.right &&
+          event.clientY >= rect.top &&
+          event.clientY <= rect.bottom,
+      );
+    };
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (isInsideCard(event)) (window as any).__pagePointerDownCount += 1;
+      },
+      true,
+    );
+    document.addEventListener(
+      "click",
+      (event) => {
+        if (isInsideCard(event)) (window as any).__pageClickCount += 1;
+      },
+      true,
+    );
+  });
+  await page.addScriptTag({ path: contentScriptPath });
+  await page.evaluate(() => window.__POINTNSHOOT_TOGGLE_OVERLAY__?.());
+  await page.getByRole("button", { name: "Pick" }).click();
+
+  const card = page.locator('[data-shot-target="spacing-card"]');
+  const box = await card.boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.move(box!.x + 32, box!.y + 32);
+  await page.mouse.click(box!.x + 32, box!.y + 32);
+
+  await expect(page.locator('textarea[aria-label="Comentario"]')).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__pagePointerDownCount))
+    .toBe(0);
+  await expect.poll(() => page.evaluate(() => (window as any).__pageClickCount)).toBe(0);
 });
 
 test("delegates PNG clipboard write to the focused tab after offscreen render", async ({ page }) => {
@@ -181,6 +282,10 @@ test("successful copy can run twice after reinjection", async ({ page }) => {
   await page.mouse.click(box!.x + 32, box!.y + 32);
   await page.locator('textarea[aria-label="Comentario"]').fill("primeira copia");
   await page.getByRole("button", { name: "Copiar PNG" }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 })
+    .toBe(1);
+  await expect(page.getByRole("button", { name: "Pick" })).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator('textarea[aria-label="Comentario"]')).toBeHidden({ timeout: 2_000 });
 
   await page.addScriptTag({ path: contentScriptPath });
