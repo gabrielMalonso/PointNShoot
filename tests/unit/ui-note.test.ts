@@ -6,6 +6,7 @@ const request: CaptureRequest = {
   id: "capture-1",
   comment: "mover CTA para cima",
   privacyMode: "redact-sensitive",
+  debugMode: false,
   createdAt: "2026-05-25T19:00:00.000Z",
   element: {
     tagName: "button",
@@ -76,6 +77,7 @@ describe("buildUiNote", () => {
     expect(note).toContain("`x=100 y=120 w=160 h=44 dpr=2`");
     expect(note).toContain("Pistas:\n`position=relative; z-index=10; transform=translateY(4px)`");
     expect(note).not.toContain("opacity=0.8");
+    expect(note).not.toContain("## Debug");
   });
 
   it("does not invent an image path when none was confirmed", () => {
@@ -83,5 +85,46 @@ describe("buildUiNote", () => {
 
     expect(note).toContain("## Informações\n\nImagem:\n`(imagem não salva)`");
     expect(note).not.toContain("PointNShoot-PNG/");
+  });
+
+  it("adds expanded debug metadata only when debug mode is enabled", () => {
+    const note = buildUiNote({
+      ...request,
+      debugMode: true,
+      element: {
+        ...request.element,
+        debug: {
+          fullCssPath: "html:nth-of-type(1) > body:nth-of-type(1) > main.checkout:nth-of-type(1) > button#buy.primary:nth-of-type(1)",
+          selectorMatches: {
+            shortSelector: 1,
+            cssPath: 1,
+            fullCssPath: 1,
+            nthOfTypePath: 1,
+          },
+          attributes: [
+            { name: "id", value: "buy" },
+            { name: "data-testid", value: "checkout-buy" },
+          ],
+          computedStyles: {
+            display: "inline-flex",
+            padding: "8px 12px",
+            "font-size": "14px",
+            opacity: "0.8",
+          },
+          domPreview: '<button id="buy" data-testid="checkout-buy">Comprar agora</button>',
+        },
+      },
+    });
+
+    expect(note).toContain("## Debug");
+    expect(note).toContain("cssPath: main.checkout > button#buy");
+    expect(note).toContain("fullCssPath: html:nth-of-type(1) > body:nth-of-type(1) > main.checkout:nth-of-type(1) > button#buy.primary:nth-of-type(1)");
+    expect(note).toContain("nthOfTypePath: html:nth-of-type(1) > body:nth-of-type(1) > button:nth-of-type(1)");
+    expect(note).toContain("matches.cssPath: 1");
+    expect(note).toContain("matches.fullCssPath: 1");
+    expect(note).toContain('data-testid="checkout-buy"');
+    expect(note).toContain("padding: 8px 12px;");
+    expect(note).toContain("opacity: 0.8;");
+    expect(note).toContain('<button id="buy" data-testid="checkout-buy">Comprar agora</button>');
   });
 });

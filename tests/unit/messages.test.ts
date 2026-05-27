@@ -6,6 +6,7 @@ const request: CaptureRequest = {
   id: "capture-1",
   comment: "ajustar espacamento",
   privacyMode: "redact-sensitive",
+  debugMode: false,
   createdAt: "2026-05-25T19:00:00.000Z",
   element: {
     tagName: "div",

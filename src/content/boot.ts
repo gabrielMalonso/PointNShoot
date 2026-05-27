@@ -5,6 +5,7 @@ import {
   hidePanel,
   renderOverlayChrome,
   setCapturing,
+  setDebugMode,
   setPageInteractionBlocked,
   setPickActive,
   showBadge,
@@ -44,6 +45,7 @@ class PointNShootController {
   private hoveredElement: Element | null = null;
   private selectedElement: Element | null = null;
   private listenersAttached = false;
+  private debugMode = false;
 
   constructor() {
     const { host, shadow } = createPointNShootShadowRoot();
@@ -63,6 +65,7 @@ class PointNShootController {
     this.refs.eventShield.addEventListener("contextmenu", this.handleShieldBlockedEvent);
     this.refs.hudPickButton.addEventListener("click", () => this.togglePick());
     this.refs.hudCloseButton.addEventListener("click", () => this.hideOverlay());
+    this.refs.debugButton.addEventListener("click", () => this.toggleDebugMode());
     this.refs.primaryButton.addEventListener("click", () => void this.submit());
     this.refs.secondaryButton.addEventListener("click", () => this.cancel());
     this.refs.textarea.addEventListener("keydown", (event) => this.handleTextareaKeyDown(event));
@@ -111,6 +114,7 @@ class PointNShootController {
     this.showOverlay();
     this.attachListeners();
     this.state = "picking";
+    this.setDebugMode(false);
     this.hoveredElement = null;
     this.selectedElement = null;
     this.refs.host.style.display = "block";
@@ -140,6 +144,7 @@ class PointNShootController {
     this.state = "idle";
     this.hoveredElement = null;
     this.selectedElement = null;
+    this.setDebugMode(false);
     this.refs.textarea.value = "";
     this.refs.host.style.visibility = "visible";
     setCapturing(this.refs, false);
@@ -327,8 +332,19 @@ class PointNShootController {
     }
   }
 
+  private toggleDebugMode(): void {
+    if (this.state !== "locked") return;
+    this.setDebugMode(!this.debugMode);
+  }
+
+  private setDebugMode(active: boolean): void {
+    this.debugMode = active;
+    setDebugMode(this.refs, active);
+  }
+
   private lockElement(element: Element): void {
     this.state = "locked";
+    this.setDebugMode(false);
     setPickActive(this.refs, true);
     setPageInteractionBlocked(this.refs, true);
     this.selectedElement = element;
@@ -383,7 +399,7 @@ class PointNShootController {
     await nextPaint();
 
     try {
-      request = createCaptureRequest(this.selectedElement, comment);
+      request = createCaptureRequest(this.selectedElement, comment, { debugMode: this.debugMode });
       const response = (await chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.captureRequest,
         payload: request,

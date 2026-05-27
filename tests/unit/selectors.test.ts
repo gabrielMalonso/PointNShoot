@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getCssPath, getNthOfTypePath, getShortSelector } from "../../src/shared/selectors";
+import { getCssPath, getFullCssPath, getNthOfTypePath, getShortSelector } from "../../src/shared/selectors";
 
 describe("selector helpers", () => {
   it("builds a compact selector from tag id and classes", () => {
@@ -23,6 +23,8 @@ describe("selector helpers", () => {
 
     expect(heading).toBeTruthy();
     expect(getCssPath(heading!)).toContain("article.card.selected:nth-of-type(2) > h2:nth-of-type(1)");
+    expect(getFullCssPath(heading!)).toContain("html:nth-of-type(1) > body:nth-of-type(1) > main:nth-of-type(1)");
+    expect(getFullCssPath(heading!)).toContain("article.card.selected:nth-of-type(2) > h2:nth-of-type(1)");
     expect(getNthOfTypePath(heading!)).toContain("article:nth-of-type(2) > h2:nth-of-type(1)");
   });
 

@@ -54,6 +54,7 @@ function isCaptureRequest(value: unknown): value is CaptureRequest {
     typeof value.id === "string" &&
     typeof value.comment === "string" &&
     (value.privacyMode === "normal" || value.privacyMode === "redact-sensitive") &&
+    typeof value.debugMode === "boolean" &&
     typeof value.createdAt === "string" &&
     isRecord(value.element)
   );

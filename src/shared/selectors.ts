@@ -123,6 +123,18 @@ export function getCssPath(element: Element): string {
   return segments.join(" > ");
 }
 
+export function getFullCssPath(element: Element): string {
+  const segments: string[] = [];
+  let current: Element | null = element;
+
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    segments.unshift(getFullCssPathSegment(current));
+    current = current.parentElement;
+  }
+
+  return segments.join(" > ");
+}
+
 export function getNthOfTypePath(element: Element): string {
   const segments: string[] = [];
   let current: Element | null = element;
@@ -146,6 +158,16 @@ function getShortClasses(element: Element, limit: number): string[] {
     .filter((item) => item.length <= 32)
     .filter((item) => !hasSelectorNoisyCharacters(item))
     .slice(0, limit);
+}
+
+function getFullCssPathSegment(element: Element): string {
+  const tag = element.tagName.toLowerCase();
+  const id = element.id ? `#${escapeCssIdentifier(element.id)}` : "";
+  const classes = getElementClasses(element, 3)
+    .map((item) => `.${escapeCssIdentifier(item)}`)
+    .join("");
+
+  return `${tag}${id}${classes}:nth-of-type(${getNthOfType(element)})`;
 }
 
 function hasSelectorNoisyCharacters(value: string): boolean {
