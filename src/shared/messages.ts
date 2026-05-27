@@ -49,15 +49,23 @@ export function isRenderImageResult(value: unknown): value is RenderImageResult 
 }
 
 function isCaptureRequest(value: unknown): value is CaptureRequest {
-  return (
-    isRecord(value) &&
+  if (!isRecord(value)) return false;
+
+  const hasRequiredFields =
     typeof value.id === "string" &&
     typeof value.comment === "string" &&
     (value.privacyMode === "normal" || value.privacyMode === "redact-sensitive") &&
-    typeof value.debugMode === "boolean" &&
+    (value.debugMode === undefined || typeof value.debugMode === "boolean") &&
     typeof value.createdAt === "string" &&
-    isRecord(value.element)
-  );
+    isRecord(value.element);
+
+  if (!hasRequiredFields) return false;
+
+  if (value.debugMode === undefined) {
+    value.debugMode = false;
+  }
+
+  return true;
 }
 
 function isCaptureFallback(value: unknown): boolean {

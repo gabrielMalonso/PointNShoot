@@ -26,7 +26,7 @@ import type { CaptureFallback, CaptureResult, DiagnosticLogEntry } from "../shar
 import { buildMinimalUiNote, buildUiNote } from "../shared/ui-note";
 
 type PointNShootState = "idle" | "picking" | "locked" | "capturing" | "fallback";
-const CONTROLLER_VERSION = "0.2.0";
+const CONTROLLER_VERSION = "0.3.0";
 
 declare global {
   interface Window {

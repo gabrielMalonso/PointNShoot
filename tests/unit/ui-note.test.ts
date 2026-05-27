@@ -127,4 +127,34 @@ describe("buildUiNote", () => {
     expect(note).toContain("opacity: 0.8;");
     expect(note).toContain('<button id="buy" data-testid="checkout-buy">Comprar agora</button>');
   });
+
+  it("redacts sensitive text in debug-only fields", () => {
+    const note = buildUiNote({
+      ...request,
+      debugMode: true,
+      element: {
+        ...request.element,
+        accessibleName: "Comprar para ana@example.com",
+        parentSummary: 'section[aria-label="Paciente ana@example.com"]',
+        debug: {
+          fullCssPath: "html:nth-of-type(1) > body:nth-of-type(1) > main.checkout:nth-of-type(1) > button#buy.primary:nth-of-type(1)",
+          selectorMatches: {
+            shortSelector: 1,
+            cssPath: 1,
+            fullCssPath: 1,
+            nthOfTypePath: 1,
+          },
+          attributes: [{ name: "aria-label", value: "Comprar para ana@example.com" }],
+          computedStyles: {},
+          domPreview: '<button aria-label="Comprar para ana@example.com">Comprar</button>',
+        },
+      },
+    });
+
+    expect(note).toContain("accessibleName=Comprar para [email]");
+    expect(note).toContain('parent=section[aria-label="Paciente [email]"]');
+    expect(note).toContain('aria-label="Comprar para [email]"');
+    expect(note).toContain('<button aria-label="Comprar para [email]">Comprar</button>');
+    expect(note).not.toContain("ana@example.com");
+  });
 });

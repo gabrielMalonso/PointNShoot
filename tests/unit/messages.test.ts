@@ -62,6 +62,15 @@ describe("message guards", () => {
     expect(isRenderRequestMessage({ type: "POINTNSHOOT_RENDER_REQUEST", payload: { request, screenshotDataUrl: "data:image/png;base64,abc" } })).toBe(true);
   });
 
+  it("normalizes legacy capture requests without debug mode", () => {
+    const legacyRequest = { ...request } as Partial<CaptureRequest>;
+    delete legacyRequest.debugMode;
+    const message = { type: "POINTNSHOOT_CAPTURE_REQUEST", payload: legacyRequest };
+
+    expect(isCaptureRequestMessage(message)).toBe(true);
+    expect(message.payload.debugMode).toBe(false);
+  });
+
   it("recognizes capture and render results", () => {
     expect(
       isCaptureResult({
@@ -92,6 +101,7 @@ describe("message guards", () => {
   it("rejects malformed messages", () => {
     expect(isRuntimeMessage({ type: "OTHER" })).toBe(false);
     expect(isCaptureRequestMessage({ type: "POINTNSHOOT_CAPTURE_REQUEST", payload: { id: "x" } })).toBe(false);
+    expect(isCaptureRequestMessage({ type: "POINTNSHOOT_CAPTURE_REQUEST", payload: { ...request, debugMode: "true" } })).toBe(false);
     expect(isRenderRequestMessage({ type: "POINTNSHOOT_RENDER_REQUEST", payload: { request } })).toBe(false);
     expect(isCaptureResult({ ok: true, copied: true })).toBe(false);
     expect(isRenderImageResult({ ok: false, reason: "not-real", fallback: { markdownPrompt: "# UI Note" } })).toBe(false);
