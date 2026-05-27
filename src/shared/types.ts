@@ -37,6 +37,26 @@ export type TopElementAtPoint = {
   shortSelector: string;
 };
 
+export type ElementAttributeSnapshot = {
+  name: string;
+  value: string;
+};
+
+export type SelectorMatchCounts = {
+  shortSelector: number | null;
+  cssPath: number | null;
+  fullCssPath: number | null;
+  nthOfTypePath: number | null;
+};
+
+export type ElementDebugContext = {
+  fullCssPath: string;
+  selectorMatches: SelectorMatchCounts;
+  attributes: ElementAttributeSnapshot[];
+  computedStyles: Record<string, string>;
+  domPreview: string | null;
+};
+
 export type ElementContext = {
   tagName: string;
   id: string | null;
@@ -57,6 +77,7 @@ export type ElementContext = {
   pageTitle: string;
   usefulStyles: UsefulStyles;
   topElementAtPoint: TopElementAtPoint | null;
+  debug?: ElementDebugContext;
 };
 
 export type CaptureRequest = {
@@ -64,6 +85,7 @@ export type CaptureRequest = {
   comment: string;
   element: ElementContext;
   privacyMode: PrivacyMode;
+  debugMode: boolean;
   createdAt: string;
 };
 

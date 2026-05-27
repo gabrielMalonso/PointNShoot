@@ -3,6 +3,8 @@ export const COPY = {
   selectHint: "Selecione um elemento",
   cancel: "Cancelar",
   capture: "Copiar",
+  debug: "Debug",
+  debugMode: "Modo debug",
   hudTitle: "PointNShoot",
   pick: "Pick",
   closeOverlay: "Fechar overlay",

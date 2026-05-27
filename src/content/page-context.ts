@@ -1,16 +1,20 @@
 import { buildElementContext } from "../shared/metadata";
 import type { CaptureRequest } from "../shared/types";
 
-export function createCaptureRequest(element: Element, comment: string): CaptureRequest {
+export function createCaptureRequest(element: Element, comment: string, options: { debugMode?: boolean } = {}): CaptureRequest {
+  const debugMode = options.debugMode ?? false;
+
   return {
     id: createId(),
     comment,
     element: buildElementContext(element, {
+      debugMode,
       privacyMode: "redact-sensitive",
       url: window.location.href,
       title: document.title,
     }),
     privacyMode: "redact-sensitive",
+    debugMode,
     createdAt: new Date().toISOString(),
   };
 }

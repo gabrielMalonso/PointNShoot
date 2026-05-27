@@ -1,13 +1,80 @@
 import { redactAndTruncate, sanitizeUrl, truncateText } from "./privacy";
-import { describeParent, getCssPath, getElementClasses, getNthOfTypePath, getShortSelector } from "./selectors";
-import type { ElementContext, PrivacyMode, Rect, TopElementAtPoint, UsefulStyles, ViewportInfo } from "./types";
+import { describeParent, getCssPath, getElementClasses, getFullCssPath, getNthOfTypePath, getShortSelector } from "./selectors";
+import type {
+  ElementAttributeSnapshot,
+  ElementContext,
+  ElementDebugContext,
+  PrivacyMode,
+  Rect,
+  SelectorMatchCounts,
+  TopElementAtPoint,
+  UsefulStyles,
+  ViewportInfo,
+} from "./types";
 
 export type BuildElementContextOptions = {
   privacyMode?: PrivacyMode;
+  debugMode?: boolean;
   url?: string;
   title?: string;
   viewport?: ViewportInfo;
 };
+
+const DEBUG_ATTRIBUTE_NAMES = new Set([
+  "alt",
+  "class",
+  "for",
+  "href",
+  "id",
+  "name",
+  "placeholder",
+  "role",
+  "src",
+  "title",
+  "type",
+]);
+
+const STABLE_DEBUG_IDENTIFIER_ATTRIBUTES = new Set(["class", "data-testid", "data-test-id", "data-cy", "data-qa", "data-component", "data-slot", "id"]);
+
+const DEBUG_STYLE_PROPERTIES = [
+  "display",
+  "position",
+  "z-index",
+  "box-sizing",
+  "width",
+  "height",
+  "margin",
+  "padding",
+  "border",
+  "border-radius",
+  "box-shadow",
+  "background-color",
+  "color",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "line-height",
+  "text-align",
+  "white-space",
+  "overflow",
+  "overflow-x",
+  "overflow-y",
+  "opacity",
+  "visibility",
+  "pointer-events",
+  "transform",
+  "top",
+  "right",
+  "bottom",
+  "left",
+  "flex",
+  "flex-direction",
+  "align-items",
+  "justify-content",
+  "gap",
+  "grid-template-columns",
+  "grid-template-rows",
+] as const;
 
 export function buildElementContext(element: Element, options: BuildElementContextOptions = {}): ElementContext {
   const privacyMode = options.privacyMode ?? "redact-sensitive";
@@ -18,14 +85,17 @@ export function buildElementContext(element: Element, options: BuildElementConte
   const url = options.url ?? globalThis.location?.href ?? "";
   const processedUrl = privacyMode === "redact-sensitive" ? sanitizeUrl(url) : url;
   const siblingStats = getSiblingStats(element);
+  const shortSelector = getShortSelector(element);
+  const cssPath = getCssPath(element);
+  const nthOfTypePath = getNthOfTypePath(element);
 
-  return {
+  const context: ElementContext = {
     tagName: element.tagName.toLowerCase(),
     id: element.id || null,
     classes: getElementClasses(element, 8),
-    shortSelector: getShortSelector(element),
-    cssPath: getCssPath(element),
-    nthOfTypePath: getNthOfTypePath(element),
+    shortSelector,
+    cssPath,
+    nthOfTypePath,
     role: getRole(element),
     accessibleName: getAccessibleName(element),
     visibleText: processedText,
@@ -40,6 +110,17 @@ export function buildElementContext(element: Element, options: BuildElementConte
     usefulStyles: getUsefulStyles(element),
     topElementAtPoint: getTopElementAtPoint(rect, viewport, element.ownerDocument ?? globalThis.document),
   };
+
+  if (options.debugMode) {
+    context.debug = getElementDebugContext(element, {
+      cssPath,
+      nthOfTypePath,
+      privacyMode,
+      shortSelector,
+    });
+  }
+
+  return context;
 }
 
 export function getViewportInfo(): ViewportInfo {
@@ -102,6 +183,104 @@ function getUsefulStyles(element: Element): UsefulStyles {
   } catch {
     return fallback;
   }
+}
+
+function getElementDebugContext(
+  element: Element,
+  options: {
+    shortSelector: string;
+    cssPath: string;
+    nthOfTypePath: string;
+    privacyMode: PrivacyMode;
+  },
+): ElementDebugContext {
+  const fullCssPath = getFullCssPath(element);
+
+  return {
+    fullCssPath,
+    selectorMatches: getSelectorMatchCounts(element.ownerDocument ?? globalThis.document, {
+      ...options,
+      fullCssPath,
+    }),
+    attributes: getAttributeSnapshot(element, options.privacyMode),
+    computedStyles: getDebugComputedStyles(element),
+    domPreview: getDomPreview(element, options.privacyMode),
+  };
+}
+
+function getSelectorMatchCounts(
+  ownerDocument: Document | undefined,
+  selectors: { shortSelector: string; cssPath: string; fullCssPath: string; nthOfTypePath: string },
+): SelectorMatchCounts {
+  return {
+    shortSelector: countSelectorMatches(ownerDocument, selectors.shortSelector),
+    cssPath: countSelectorMatches(ownerDocument, selectors.cssPath),
+    fullCssPath: countSelectorMatches(ownerDocument, selectors.fullCssPath),
+    nthOfTypePath: countSelectorMatches(ownerDocument, selectors.nthOfTypePath),
+  };
+}
+
+function countSelectorMatches(ownerDocument: Document | undefined, selector: string): number | null {
+  if (!ownerDocument || !selector) return null;
+
+  try {
+    return ownerDocument.querySelectorAll(selector).length;
+  } catch {
+    return null;
+  }
+}
+
+function getAttributeSnapshot(element: Element, privacyMode: PrivacyMode): ElementAttributeSnapshot[] {
+  return Array.from(element.attributes)
+    .filter((attribute) => shouldCaptureDebugAttribute(attribute.name))
+    .map((attribute) => ({
+      name: attribute.name,
+      value: sanitizeDebugValue(attribute.value, privacyMode, attribute.name),
+    }))
+    .slice(0, 20);
+}
+
+function shouldCaptureDebugAttribute(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return DEBUG_ATTRIBUTE_NAMES.has(normalized) || normalized.startsWith("aria-") || normalized.startsWith("data-");
+}
+
+function getDebugComputedStyles(element: Element): Record<string, string> {
+  try {
+    const style = element.ownerDocument?.defaultView?.getComputedStyle(element);
+    if (!style) return {};
+
+    return Object.fromEntries(
+      DEBUG_STYLE_PROPERTIES.map((property) => [property, truncateText(style.getPropertyValue(property), 160)]).filter(([, value]) => value),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function getDomPreview(element: Element, privacyMode: PrivacyMode): string | null {
+  try {
+    const tag = element.tagName.toLowerCase();
+    const attributes = getAttributeSnapshot(element, privacyMode)
+      .map((attribute) => `${attribute.name}="${attribute.value.replaceAll('"', "'")}"`)
+      .join(" ");
+    const text = sanitizeDebugValue(getVisibleText(element), privacyMode, "text");
+    const openTag = attributes ? `<${tag} ${attributes}>` : `<${tag}>`;
+    const closeTag = `</${tag}>`;
+
+    if (!text) return truncateText(`${openTag}${closeTag}`, 320);
+    return truncateText(`${openTag}${text}${closeTag}`, 320);
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeDebugValue(value: string, privacyMode: PrivacyMode, attributeName: string): string {
+  const maybeUrl = attributeName === "href" || attributeName === "src" ? sanitizeUrl(value) : value;
+  if (privacyMode === "redact-sensitive" && STABLE_DEBUG_IDENTIFIER_ATTRIBUTES.has(attributeName.toLowerCase())) {
+    return truncateText(maybeUrl, 220);
+  }
+  return privacyMode === "redact-sensitive" ? redactAndTruncate(maybeUrl, 220) : truncateText(maybeUrl, 220);
 }
 
 function getTopElementAtPoint(rect: Rect, viewport: ViewportInfo, ownerDocument: Document | undefined): TopElementAtPoint | null {

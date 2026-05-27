@@ -133,9 +133,11 @@ test("toggles the persistent overlay and Pick mode separately", async ({ page })
   const card = page.locator('[data-shot-target="spacing-card"]');
   const box = await card.boundingBox();
   expect(box).toBeTruthy();
-  await page.mouse.move(box!.x + 32, box!.y + 32);
-  await page.mouse.click(box!.x + 32, box!.y + 32);
+  await page.mouse.move(box!.x + 8, box!.y + 8);
+  await page.mouse.click(box!.x + 8, box!.y + 8);
   await expect(page.locator('textarea[aria-label="Comentário"]')).toBeVisible();
+  await expect(page.getByRole("button", { name: "Debug" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Debug" })).toHaveAttribute("aria-pressed", "false");
 
   await pickButton.click();
   await expect(pickButton).toBeVisible();
@@ -203,8 +205,8 @@ test("blocks page pointer and click handlers while Pick is active", async ({ pag
   const card = page.locator('[data-shot-target="spacing-card"]');
   const box = await card.boundingBox();
   expect(box).toBeTruthy();
-  await page.mouse.move(box!.x + 32, box!.y + 32);
-  await page.mouse.click(box!.x + 32, box!.y + 32);
+  await page.mouse.move(box!.x + 8, box!.y + 8);
+  await page.mouse.click(box!.x + 8, box!.y + 8);
 
   await expect(page.locator('textarea[aria-label="Comentário"]')).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as any).__pagePointerDownCount)).toBe(0);
@@ -238,9 +240,41 @@ test("selects an element, saves the PNG result and copies the UI Note text", asy
   const request = await page.evaluate(() => (window as any).__lastPnsRequest);
   expect(request.type).toBe("POINTNSHOOT_CAPTURE_REQUEST");
   expect(request.payload.comment).toContain("respiro");
+  expect(request.payload.debugMode).toBe(false);
+  expect(request.payload.element.debug).toBeUndefined();
   expect(request.payload.element.shortSelector).toBe("h1");
   expect(request.payload.element.cssPath).toContain("article.card.primary");
   expect(request.payload.element.topElementAtPoint).toBeTruthy();
+});
+
+test("adds debug metadata to the capture request when Debug is enabled", async ({ page }) => {
+  await page.goto(new URL("../fixtures/simple-page.html", import.meta.url).toString());
+  await page.addScriptTag({ path: contentScriptPath });
+  await page.evaluate(() => window.__POINTNSHOOT_START__?.());
+
+  const card = page.locator('[data-shot-target="spacing-card"]');
+  const box = await card.boundingBox();
+  expect(box).toBeTruthy();
+
+  await page.mouse.move(box!.x + 8, box!.y + 8);
+  await page.mouse.click(box!.x + 8, box!.y + 8);
+
+  const debugButton = page.getByRole("button", { name: "Debug" });
+  await expect(debugButton).toBeVisible();
+  await expect(debugButton).toHaveAttribute("aria-pressed", "false");
+  await debugButton.click();
+  await expect(debugButton).toHaveAttribute("aria-pressed", "true");
+
+  await page.locator('textarea[aria-label="Comentário"]').fill("Preciso debugar o layout deste card.");
+  await page.getByRole("button", { name: "Copiar" }).click();
+
+  await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(1);
+  const request = await page.evaluate(() => (window as any).__lastPnsRequest);
+  expect(request.payload.debugMode).toBe(true);
+  expect(request.payload.element.debug.selectorMatches.cssPath).toBe(1);
+  expect(request.payload.element.debug.attributes).toContainEqual({ name: "data-shot-target", value: "spacing-card" });
+  expect(request.payload.element.debug.computedStyles.display).toBeTruthy();
+  expect(request.payload.element.debug.domPreview).toContain("spacing-card");
 });
 
 test("shows a manual fallback when writeText is blocked after the image is saved", async ({ page }) => {

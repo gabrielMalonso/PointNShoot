@@ -13,6 +13,7 @@ export type OverlayRefs = {
   badge: HTMLDivElement;
   panel: HTMLDivElement;
   textarea: HTMLTextAreaElement;
+  debugButton: HTMLButtonElement;
   primaryButton: HTMLButtonElement;
   secondaryButton: HTMLButtonElement;
   toast: HTMLDivElement;
@@ -43,6 +44,8 @@ export function renderOverlayChrome(shadow: ShadowRoot): OverlayRefs {
       <label class="label" for="pointnshoot-comment">${COPY.commentLabel}</label>
       <textarea id="pointnshoot-comment" aria-label="${COPY.commentLabel}" placeholder="${COPY.commentPlaceholder}" spellcheck="true"></textarea>
       <div class="actions">
+        <button class="debug-toggle" type="button" aria-pressed="false" title="${COPY.debugMode}" data-testid="pointnshoot-debug">${COPY.debug}</button>
+        <span class="actions-fill" aria-hidden="true"></span>
         <button class="secondary" type="button">${COPY.cancel}</button>
         <button class="primary" type="button">${COPY.capture}</button>
       </div>
@@ -64,6 +67,7 @@ export function renderOverlayChrome(shadow: ShadowRoot): OverlayRefs {
     badge: mustFind<HTMLDivElement>(shadow, ".badge"),
     panel: mustFind<HTMLDivElement>(shadow, ".panel"),
     textarea: mustFind<HTMLTextAreaElement>(shadow, "textarea"),
+    debugButton: mustFind<HTMLButtonElement>(shadow, ".debug-toggle"),
     primaryButton: mustFind<HTMLButtonElement>(shadow, ".primary"),
     secondaryButton: mustFind<HTMLButtonElement>(shadow, ".secondary"),
     toast: mustFind<HTMLDivElement>(shadow, ".toast"),
@@ -86,6 +90,11 @@ export function hideHud(refs: OverlayRefs): void {
 export function setPickActive(refs: OverlayRefs, active: boolean): void {
   refs.hudPickButton.setAttribute("aria-pressed", String(active));
   refs.hudPickButton.classList.toggle("is-active", active);
+}
+
+export function setDebugMode(refs: OverlayRefs, active: boolean): void {
+  refs.debugButton.setAttribute("aria-pressed", String(active));
+  refs.debugButton.classList.toggle("is-active", active);
 }
 
 export function setPageInteractionBlocked(refs: OverlayRefs, blocked: boolean): void {
@@ -144,6 +153,7 @@ export function showToast(refs: OverlayRefs, message: string, timeoutMs = 2200):
 export function setCapturing(refs: OverlayRefs, capturing: boolean): void {
   refs.primaryButton.disabled = capturing;
   refs.secondaryButton.disabled = capturing;
+  refs.debugButton.disabled = capturing;
   refs.textarea.disabled = capturing;
   refs.primaryButton.textContent = capturing ? COPY.copying : COPY.capture;
 }
@@ -411,9 +421,13 @@ function overlayCss(): string {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      justify-content: flex-end;
       align-items: center;
       margin-top: 10px;
+    }
+
+    .actions-fill {
+      flex: 1 1 auto;
+      min-width: 8px;
     }
 
     .panel button,
@@ -440,6 +454,23 @@ function overlayCss(): string {
 
     .secondary {
       background: transparent;
+      color: var(--pns-ink);
+    }
+
+    .debug-toggle {
+      background: rgba(14, 27, 42, 0.04);
+      color: var(--pns-muted);
+      min-width: 62px;
+    }
+
+    .debug-toggle:hover {
+      border-color: rgba(255, 47, 156, 0.34);
+      color: var(--pns-ink);
+    }
+
+    .debug-toggle.is-active {
+      border-color: rgba(255, 47, 156, 0.52);
+      background: var(--pns-accent-soft);
       color: var(--pns-ink);
     }
 

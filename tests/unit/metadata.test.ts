@@ -76,6 +76,64 @@ describe("buildElementContext", () => {
       label: "button.chip.primary",
       shortSelector: 'button[data-testid="profile-save"]',
     });
+    expect(context.debug).toBeUndefined();
+  });
+
+  it("collects expanded debug context only when requested", () => {
+    document.body.innerHTML = `
+      <main>
+        <button
+          class="chip primary"
+          data-testid="agenda-patient-search-input"
+          data-component="AgendaPatientSearchInput"
+          aria-label="Salvar ana@example.com"
+          style="display: inline-flex; position: relative; padding: 8px 12px;"
+        >Salvar ana@example.com</button>
+      </main>
+    `;
+    const button = document.querySelector(".primary") as HTMLElement;
+    button.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 30,
+        width: 120,
+        height: 40,
+        top: 30,
+        left: 20,
+        right: 140,
+        bottom: 70,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    mockElementFromPoint(button);
+
+    const context = buildElementContext(button, {
+      debugMode: true,
+      viewport: {
+        width: 1280,
+        height: 720,
+        devicePixelRatio: 2,
+        scrollX: 0,
+        scrollY: 0,
+        visualViewportOffsetLeft: 0,
+        visualViewportOffsetTop: 0,
+        visualViewportScale: 1,
+      },
+    });
+
+    expect(context.debug?.selectorMatches).toEqual({
+      shortSelector: 1,
+      cssPath: 1,
+      fullCssPath: 1,
+      nthOfTypePath: 1,
+    });
+    expect(context.debug?.fullCssPath).toContain("html:nth-of-type(1) > body:nth-of-type(1) > main:nth-of-type(1)");
+    expect(context.debug?.attributes).toContainEqual({ name: "data-testid", value: "agenda-patient-search-input" });
+    expect(context.debug?.attributes).toContainEqual({ name: "data-component", value: "AgendaPatientSearchInput" });
+    expect(context.debug?.attributes).toContainEqual({ name: "class", value: "chip primary" });
+    expect(context.debug?.attributes).toContainEqual({ name: "aria-label", value: "Salvar [email]" });
+    expect(context.debug?.computedStyles.display).toBe("inline-flex");
+    expect(context.debug?.computedStyles.position).toBe("relative");
+    expect(context.debug?.domPreview).toContain("Salvar [email]");
   });
 
   it("records null topElementAtPoint when the element has no visible area", () => {
