@@ -36,8 +36,8 @@ describe("buildElementContext", () => {
     const elementFromPoint = mockElementFromPoint(button);
 
     const context = buildElementContext(button, {
-      url: "https://example.com/edit?token=secret&tab=profile",
-      title: "Teste",
+      url: "https://example.com/patients/ana@example.com/edit?token=secret&tab=profile",
+      title: "Teste ana@example.com",
       viewport: {
         width: 1280,
         height: 720,
@@ -56,6 +56,8 @@ describe("buildElementContext", () => {
     expect(context.accessibleName).toBe("Salvar alteracoes");
     expect(context.visibleText).toContain("[email]");
     expect(context.url).toContain("token=<redacted>");
+    expect(context.url).not.toContain("ana@example.com");
+    expect(context.pageTitle).toBe("Teste [email]");
     expect(context.similarSiblingCount).toBe(1);
     expect(context.boundingRect).toEqual({ x: 20, y: 30, width: 120, height: 40 });
     expect(context.usefulStyles).toMatchObject({

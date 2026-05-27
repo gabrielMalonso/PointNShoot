@@ -7,15 +7,14 @@ export type BuildUiNoteOptions = {
 
 export function buildUiNote(request: CaptureRequest, options: BuildUiNoteOptions = {}): string {
   const element = request.element;
-  const comment = request.privacyMode === "redact-sensitive" ? redactSensitiveText(request.comment) : request.comment;
-  const url = request.privacyMode === "redact-sensitive" ? sanitizeUrl(element.url) : element.url;
+  const url = request.privacyMode === "redact-sensitive" ? redactSensitiveText(sanitizeUrl(element.url)) : element.url;
 
   const lines = [
     "# UI Note",
     "",
     "## Prompt",
     "",
-    textBlock(comment, 500),
+    textBlock(request.comment, 500, request.privacyMode),
     "",
     "## Informações",
     "",
@@ -26,13 +25,13 @@ export function buildUiNote(request: CaptureRequest, options: BuildUiNoteOptions
     code(url),
     "",
     "Elemento selecionado:",
-    code(element.shortSelector),
+    code(formatPrivacyText(element.shortSelector, request.privacyMode, "(indisponivel)")),
     "",
     "Elemento no ponto:",
-    code(formatTopElementAtPoint(element)),
+    code(formatTopElementAtPoint(element, request.privacyMode)),
     "",
     "Texto:",
-    code(element.visibleTextPreview || element.visibleText || "(sem texto visível)"),
+    code(formatPrivacyText(element.visibleTextPreview || element.visibleText, request.privacyMode, "(sem texto visível)")),
     "",
     "Ponto:",
     code(formatPoint(element)),
@@ -57,7 +56,7 @@ export function buildMinimalUiNote(comment: string): string {
     "",
     "## Prompt",
     "",
-    textBlock(comment, 500),
+    textBlock(comment, 500, "redact-sensitive"),
     "",
     "## Informações",
     "",
@@ -92,10 +91,10 @@ function formatDebugSection(element: ElementContext, privacyMode: PrivacyMode): 
     "Seletores:",
     fencedCode(
       [
-        `shortSelector: ${formatDebugText(element.shortSelector, privacyMode, "(indisponivel)")}`,
-        `cssPath: ${formatDebugText(element.cssPath, privacyMode, "(indisponivel)")}`,
-        `fullCssPath: ${formatDebugText(debug?.fullCssPath, privacyMode, "(indisponivel)")}`,
-        `nthOfTypePath: ${formatDebugText(element.nthOfTypePath, privacyMode, "(indisponivel)")}`,
+        `shortSelector: ${formatPrivacyText(element.shortSelector, privacyMode, "(indisponivel)")}`,
+        `cssPath: ${formatPrivacyText(element.cssPath, privacyMode, "(indisponivel)")}`,
+        `fullCssPath: ${formatPrivacyText(debug?.fullCssPath, privacyMode, "(indisponivel)")}`,
+        `nthOfTypePath: ${formatPrivacyText(element.nthOfTypePath, privacyMode, "(indisponivel)")}`,
         `matches.shortSelector: ${formatCount(debug?.selectorMatches.shortSelector)}`,
         `matches.cssPath: ${formatCount(debug?.selectorMatches.cssPath)}`,
         `matches.fullCssPath: ${formatCount(debug?.selectorMatches.fullCssPath)}`,
@@ -107,11 +106,11 @@ function formatDebugSection(element: ElementContext, privacyMode: PrivacyMode): 
     fencedCode(
       [
         `tag=${element.tagName}`,
-        `id=${formatDebugText(element.id, privacyMode, "(sem id)")}`,
-        `classes=${formatDebugText(element.classes.join(" "), privacyMode, "(sem classes)")}`,
+        `id=${formatPrivacyText(element.id, privacyMode, "(sem id)")}`,
+        `classes=${formatPrivacyText(element.classes.join(" "), privacyMode, "(sem classes)")}`,
         `role=${element.role ?? "(sem role)"}`,
-        `accessibleName=${formatDebugText(element.accessibleName, privacyMode, "(sem nome acessivel)")}`,
-        `parent=${formatDebugText(element.parentSummary, privacyMode, "(sem parent)")}`,
+        `accessibleName=${formatPrivacyText(element.accessibleName, privacyMode, "(sem nome acessivel)")}`,
+        `parent=${formatPrivacyText(element.parentSummary, privacyMode, "(sem parent)")}`,
         `siblings=${element.siblingIndex + 1}/${element.similarSiblingCount}`,
       ].join("\n"),
     ),
@@ -125,7 +124,7 @@ function formatDebugSection(element: ElementContext, privacyMode: PrivacyMode): 
         `rect=${formatRect(element)}`,
         `viewport=w=${round(element.viewport.width)} h=${round(element.viewport.height)} scrollX=${round(element.viewport.scrollX)} scrollY=${round(element.viewport.scrollY)}`,
         `visualViewport=offsetX=${round(element.viewport.visualViewportOffsetLeft)} offsetY=${round(element.viewport.visualViewportOffsetTop)} scale=${element.viewport.visualViewportScale}`,
-        `topElementAtPoint=${formatDebugText(formatTopElementAtPoint(element), privacyMode, "(sem área visível)")}`,
+        `topElementAtPoint=${formatPrivacyText(formatTopElementAtPoint(element, privacyMode), privacyMode, "(sem área visível)")}`,
       ].join("\n"),
     ),
     "",
@@ -133,13 +132,13 @@ function formatDebugSection(element: ElementContext, privacyMode: PrivacyMode): 
     fencedCode(formatComputedStyles(debug?.computedStyles ?? {})),
     "",
     "DOM:",
-    fencedCode(formatDebugText(debug?.domPreview, privacyMode, "(preview indisponivel)")),
+    fencedCode(formatPrivacyText(debug?.domPreview, privacyMode, "(preview indisponivel)")),
   ];
 }
 
 function formatAttributes(attributes: NonNullable<ElementContext["debug"]>["attributes"], privacyMode: PrivacyMode): string {
   if (attributes.length === 0) return "(nenhum atributo capturado)";
-  return attributes.map((attribute) => `${attribute.name}="${formatDebugText(attribute.value, privacyMode, "")}"`).join("\n");
+  return attributes.map((attribute) => `${attribute.name}="${formatPrivacyText(attribute.value, privacyMode, "")}"`).join("\n");
 }
 
 function formatComputedStyles(styles: Record<string, string>): string {
@@ -152,15 +151,17 @@ function formatCount(value: number | null | undefined): string {
   return typeof value === "number" ? String(value) : "(indisponivel)";
 }
 
-function formatDebugText(value: string | null | undefined, privacyMode: PrivacyMode, fallback: string): string {
+function formatPrivacyText(value: string | null | undefined, privacyMode: PrivacyMode, fallback: string, maxLength = 500): string {
   if (!value) return fallback;
-  return privacyMode === "redact-sensitive" ? redactAndTruncate(value, 500) : truncateText(value, 500);
+  return privacyMode === "redact-sensitive" ? redactAndTruncate(value, maxLength) : truncateText(value, maxLength);
 }
 
-function formatTopElementAtPoint(element: ElementContext): string {
+function formatTopElementAtPoint(element: ElementContext, privacyMode: PrivacyMode): string {
   const top = element.topElementAtPoint;
   if (!top) return "(sem área visível)";
-  return `${top.label} [${top.shortSelector}]`;
+  const label = formatPrivacyText(top.label, privacyMode, "(sem label)");
+  const selector = formatPrivacyText(top.shortSelector, privacyMode, "(sem seletor)");
+  return `${label} [${selector}]`;
 }
 
 function formatPoint(element: ElementContext): string {
@@ -169,8 +170,8 @@ function formatPoint(element: ElementContext): string {
   return `x=${round(top.x)} y=${round(top.y)}`;
 }
 
-function textBlock(value: string, maxLength: number): string {
-  return truncateText(value, maxLength) || "(vazio)";
+function textBlock(value: string, maxLength: number, privacyMode: PrivacyMode): string {
+  return formatPrivacyText(value, privacyMode, "(vazio)", maxLength) || "(vazio)";
 }
 
 function code(value: string): string {

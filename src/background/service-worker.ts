@@ -2,6 +2,7 @@ import { appendDiagnostic, errorDiagnostic, makeDiagnostic } from "../shared/dia
 import { buildDownloadFilename, downloadRenderedPng, getConfiguredDownloadFolder } from "./downloads";
 import { toCaptureFailureReason } from "../shared/errors";
 import { isCaptureRequestMessage, isRenderImageResult, MESSAGE_TYPES } from "../shared/messages";
+import { redactAndTruncate } from "../shared/privacy";
 import type { CaptureRequest, CaptureResult, DiagnosticLogEntry, RenderImageResult, RenderRequestMessage } from "../shared/types";
 import { buildUiNote } from "../shared/ui-note";
 
@@ -61,7 +62,7 @@ async function handleCapture(request: CaptureRequest, sender: chrome.runtime.Mes
       diagnostics,
       makeDiagnostic("background", "info", "capture:start", "Capture request received.", {
         requestId: request.id,
-        selector: request.element.shortSelector,
+        selector: redactAndTruncate(request.element.shortSelector, 220),
         tabId: sender.tab?.id ?? null,
         windowId: sender.tab?.windowId ?? null,
       }),

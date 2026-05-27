@@ -66,6 +66,23 @@ describe("background downloads", () => {
     );
   });
 
+  it("redacts sensitive selector values from the requested filename", () => {
+    const request = {
+      id: "capture-12345678-abcdef",
+      createdAt: "2026-05-25T19:07:00.000Z",
+      element: {
+        shortSelector: 'button[aria-label="Comprar para ana@example.com CPF 123.456.789-10"]',
+      },
+    } as CaptureRequest;
+
+    const filename = buildDownloadFilename(request, { now: new Date("2026-05-25T19:07:00") });
+
+    expect(filename).toBe("PointNShoot-PNG/2026-05-25-1907-button-aria-label-comprar-para-email-captur.png");
+    expect(filename).not.toContain("ana");
+    expect(filename).not.toContain("example");
+    expect(filename).not.toContain("123");
+  });
+
   it("allows the Downloads subfolder to be configured safely", async () => {
     await expect(
       getConfiguredDownloadFolder({

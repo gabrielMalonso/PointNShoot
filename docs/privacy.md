@@ -11,7 +11,8 @@ PointNShoot processa tudo localmente no navegador.
 - A permissão `storage` guarda apenas a subpasta configurada de Downloads, quando existir.
 - O PNG salvo usa crop ao redor do elemento selecionado, não a página inteira, e não desenha comentário ou metadados.
 - A nota copiada contém o caminho absoluto local do PNG salvo.
-- Texto visível e metadados são truncados.
+- Texto visível, seletores e metadados copiados são redigidos e truncados no modo padrão.
+- O slug do arquivo PNG também redige valores sensíveis vindos do seletor selecionado.
 - Valores longos em parâmetros de URL também são redigidos, como `membershipId=<redacted>`.
 - O modo padrão é `redact-sensitive`.
 

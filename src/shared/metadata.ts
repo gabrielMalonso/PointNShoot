@@ -1,4 +1,4 @@
-import { redactAndTruncate, sanitizeUrl, truncateText } from "./privacy";
+import { redactAndTruncate, redactSensitiveText, sanitizeUrl, truncateText } from "./privacy";
 import { describeParent, getCssPath, getElementClasses, getFullCssPath, getNthOfTypePath, getShortSelector } from "./selectors";
 import type {
   ElementAttributeSnapshot,
@@ -83,7 +83,7 @@ export function buildElementContext(element: Element, options: BuildElementConte
   const visibleText = getVisibleText(element);
   const processedText = privacyMode === "redact-sensitive" ? redactAndTruncate(visibleText, 500) : truncateText(visibleText, 500);
   const url = options.url ?? globalThis.location?.href ?? "";
-  const processedUrl = privacyMode === "redact-sensitive" ? sanitizeUrl(url) : url;
+  const processedUrl = privacyMode === "redact-sensitive" ? redactSensitiveText(sanitizeUrl(url)) : url;
   const siblingStats = getSiblingStats(element);
   const shortSelector = getShortSelector(element);
   const cssPath = getCssPath(element);
@@ -106,7 +106,10 @@ export function buildElementContext(element: Element, options: BuildElementConte
     boundingRect: rect,
     viewport,
     url: processedUrl,
-    pageTitle: options.title ?? globalThis.document?.title ?? "",
+    pageTitle:
+      privacyMode === "redact-sensitive"
+        ? redactAndTruncate(options.title ?? globalThis.document?.title ?? "", 220)
+        : truncateText(options.title ?? globalThis.document?.title ?? "", 220),
     usefulStyles: getUsefulStyles(element),
     topElementAtPoint: getTopElementAtPoint(rect, viewport, element.ownerDocument ?? globalThis.document),
   };

@@ -1,4 +1,5 @@
 import type { CaptureRequest, SavedImage } from "../shared/types";
+import { redactSensitiveText } from "../shared/privacy";
 
 type ChromeEvent<T> = {
   addListener(listener: (event: T) => void): void;
@@ -61,7 +62,7 @@ export function buildDownloadFilename(
   const now = options.now ?? new Date(request.createdAt);
   const folder = sanitizeDownloadFolder(options.folder ?? DOWNLOAD_FOLDER);
   const timestamp = formatDownloadTimestamp(Number.isNaN(now.getTime()) ? new Date() : now);
-  const selectorSlug = slugifySelector(request.element.shortSelector);
+  const selectorSlug = slugifySelector(redactSensitiveText(request.element.shortSelector));
   const id = shortId(request.id);
   return `${folder}/${timestamp}-${selectorSlug}-${id}.png`;
 }

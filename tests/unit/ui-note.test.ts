@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildUiNote } from "../../src/shared/ui-note";
+import { buildMinimalUiNote, buildUiNote } from "../../src/shared/ui-note";
 import type { CaptureRequest } from "../../src/shared/types";
 
 const request: CaptureRequest = {
@@ -85,6 +85,41 @@ describe("buildUiNote", () => {
 
     expect(note).toContain("## Informações\n\nImagem:\n`(imagem não salva)`");
     expect(note).not.toContain("PointNShoot-PNG/");
+  });
+
+  it("redacts sensitive selector and top-element metadata in the copied note", () => {
+    const note = buildUiNote({
+      ...request,
+      comment: "ajustar CTA de ana@example.com",
+      element: {
+        ...request.element,
+        shortSelector: 'button[aria-label="Comprar para ana@example.com"]',
+        visibleText: "Comprar para CPF 123.456.789-10",
+        visibleTextPreview: "Comprar para CPF 123.456.789-10",
+        url: "https://example.com/patients/ana@example.com?token=secret&tab=profile",
+        topElementAtPoint: {
+          x: 180,
+          y: 142,
+          label: "button#patient-12345678910.primary",
+          shortSelector: 'button[data-testid="patient-12345678910"]',
+        },
+      },
+    });
+
+    expect(note).toContain("[email]");
+    expect(note).toContain("[cpf]");
+    expect(note).not.toContain("ana@example.com");
+    expect(note).not.toContain("123.456.789-10");
+    expect(note).not.toContain("12345678910");
+  });
+
+  it("redacts sensitive text in the minimal fallback note", () => {
+    const note = buildMinimalUiNote("Revisar conta ana@example.com com token abcdefghijklmnopqrstuvwxyz123456");
+
+    expect(note).toContain("[email]");
+    expect(note).toContain("[token]");
+    expect(note).not.toContain("ana@example.com");
+    expect(note).not.toContain("abcdefghijklmnopqrstuvwxyz123456");
   });
 
   it("adds expanded debug metadata only when debug mode is enabled", () => {
