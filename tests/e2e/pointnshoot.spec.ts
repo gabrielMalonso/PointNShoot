@@ -148,7 +148,7 @@ test("toggles the persistent overlay and Pick mode separately", async ({ page })
   await expect(pickButton).toBeHidden();
 });
 
-test("runtime toggle message opens and closes the overlay without starting Pick", async ({ page }) => {
+test("runtime toggle message opens the overlay, then toggles Pick without closing it", async ({ page }) => {
   await page.goto(new URL("../fixtures/simple-page.html", import.meta.url).toString());
   await page.addScriptTag({ path: contentScriptPath });
 
@@ -165,7 +165,15 @@ test("runtime toggle message opens and closes the overlay without starting Pick"
     (window as any).__emitPnsRuntimeMessage({ type: "POINTNSHOOT_TOGGLE_OVERLAY" });
   });
 
-  await expect(pickButton).toBeHidden();
+  await expect(pickButton).toBeVisible();
+  await expect(pickButton).toHaveAttribute("aria-pressed", "true");
+
+  await page.evaluate(() => {
+    (window as any).__emitPnsRuntimeMessage({ type: "POINTNSHOOT_TOGGLE_OVERLAY" });
+  });
+
+  await expect(pickButton).toBeVisible();
+  await expect(pickButton).toHaveAttribute("aria-pressed", "false");
 });
 
 test("blocks page pointer and click handlers while Pick is active", async ({ page }) => {

@@ -77,12 +77,12 @@ class PointNShootController {
   }
 
   toggleOverlay(): void {
-    if (this.overlayVisible) {
-      this.hideOverlay();
+    if (!this.overlayVisible) {
+      this.showOverlay();
       return;
     }
 
-    this.showOverlay();
+    this.togglePick();
   }
 
   showOverlay(): void {
