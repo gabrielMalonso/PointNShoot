@@ -27,7 +27,11 @@ export function isCaptureResult(value: unknown): value is CaptureResult {
   if (!isRecord(value) || typeof value.ok !== "boolean") return false;
 
   if (value.ok === true) {
-    return typeof value.markdownPrompt === "string" && isSavedImage(value.savedImage);
+    return (
+      typeof value.markdownPrompt === "string" &&
+      isSavedImage(value.savedImage) &&
+      isT3ComposerDeliveryResult(value.delivery)
+    );
   }
 
   return isCaptureFailureReason(value.reason) && isCaptureFallback(value.fallback);
@@ -82,6 +86,18 @@ function isSavedImage(value: unknown): boolean {
     typeof value.width === "number" &&
     typeof value.height === "number"
   );
+}
+
+function isT3ComposerDeliveryResult(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value) || typeof value.ok !== "boolean") return false;
+  if (value.ok === true) {
+    return (
+      (typeof value.tabId === "number" || value.tabId === null) &&
+      (typeof value.url === "string" || value.url === null)
+    );
+  }
+  return typeof value.reason === "string" && (value.message === undefined || typeof value.message === "string");
 }
 
 function isCaptureFailureReason(value: unknown): boolean {

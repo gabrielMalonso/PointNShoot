@@ -1,5 +1,6 @@
 import { appendDiagnostic, errorDiagnostic, makeDiagnostic } from "../shared/diagnostics";
 import { buildDownloadFilename, downloadRenderedPng, getConfiguredDownloadFolder } from "./downloads";
+import { deliverToT3Composer } from "./t3-composer";
 import { toCaptureFailureReason } from "../shared/errors";
 import { isCaptureRequestMessage, isRenderImageResult, MESSAGE_TYPES } from "../shared/messages";
 import { redactAndTruncate } from "../shared/privacy";
@@ -141,10 +142,49 @@ async function handleCapture(request: CaptureRequest, sender: chrome.runtime.Mes
       }),
     );
 
+    const markdownPrompt = buildUiNote(request, { imagePath: savedImage.filename });
+    diagnostics = appendDiagnostic(
+      diagnostics,
+      makeDiagnostic("background", "info", "t3:deliver:start", "Sending UI Note to T3 Composer.", {
+        requestId: request.id,
+        filename: savedImage.filename,
+      }),
+    );
+    const delivery = await deliverToT3Composer(
+      { markdownPrompt, savedImage },
+      undefined,
+      undefined,
+      (diagnostic) => {
+        diagnostics = appendDiagnostic(
+          diagnostics,
+          makeDiagnostic(
+            "background",
+            diagnostic.level,
+            `t3:${diagnostic.step}`,
+            diagnostic.message,
+            diagnostic.details,
+          ),
+        );
+      },
+    );
+    diagnostics = appendDiagnostic(
+      diagnostics,
+      makeDiagnostic(
+        "background",
+        delivery.ok ? "info" : "warn",
+        delivery.ok ? "t3:deliver:complete" : "t3:deliver:failed",
+        delivery.ok ? "UI Note delivered to T3 Composer." : "Could not deliver UI Note to T3 Composer.",
+        delivery.ok
+          ? { requestId: request.id, tabId: delivery.tabId, url: delivery.url }
+          : { requestId: request.id, reason: delivery.reason, message: delivery.message ?? null },
+      ),
+    );
+
     return {
       ok: true,
-      markdownPrompt: buildUiNote(request, { imagePath: savedImage.filename }),
+      markdownPrompt,
       savedImage,
+      delivery,
       diagnostics,
     };
   } catch (error) {

@@ -26,7 +26,7 @@ import type { CaptureFallback, CaptureResult, DiagnosticLogEntry } from "../shar
 import { buildMinimalUiNote, buildUiNote } from "../shared/ui-note";
 
 type PointNShootState = "idle" | "picking" | "locked" | "capturing" | "fallback";
-const CONTROLLER_VERSION = "0.3.0";
+const CONTROLLER_VERSION = "0.3.1";
 
 declare global {
   interface Window {
@@ -400,6 +400,12 @@ class PointNShootController {
 
     try {
       request = createCaptureRequest(this.selectedElement, comment, { debugMode: this.debugMode });
+      logPointNShootPageEvent("capture:submit", {
+        requestId: request.id,
+        selector: request.element.shortSelector,
+        url: request.element.url,
+      });
+
       const response = (await chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.captureRequest,
         payload: request,
@@ -409,6 +415,7 @@ class PointNShootController {
       setCapturing(this.refs, false);
 
       if (!response) throw new Error("capture-failed: empty response");
+      logCaptureResultToPageConsole(response);
       await this.handleCaptureResult(response);
     } catch (error) {
       this.refs.host.style.visibility = "visible";
@@ -428,23 +435,43 @@ class PointNShootController {
         diagnostics,
       };
       console.error("[PointNShoot] capture failed", error);
+      logDiagnosticEntriesToPageConsole(diagnostics);
       await this.handleCaptureResult({ ok: false, reason: "capture-failed", fallback });
     }
   }
 
   private async handleCaptureResult(result: CaptureResult): Promise<void> {
     if (result.ok) {
+      if (result.delivery?.ok) {
+        showToast(this.refs, COPY.sentToT3, 1800);
+        this.cancel();
+        return;
+      }
+
       const fallback = await this.tryCopyUiNote(result.markdownPrompt, result.diagnostics);
       if (fallback) {
+        logPointNShootPageEvent("capture:fallback-visible", {
+          reason: result.delivery?.ok === false ? result.delivery.reason : "clipboard-blocked",
+          message: result.delivery?.ok === false ? (result.delivery.message ?? null) : null,
+        });
+        logDiagnosticEntriesToPageConsole(fallback.diagnostics);
         this.showCaptureFallback(fallback);
         return;
       }
 
-      showToast(this.refs, COPY.copied, 1800);
+      if (result.delivery && !result.delivery.ok) {
+        logPointNShootPageEvent("capture:t3-fallback-copied", {
+          reason: result.delivery.reason,
+          message: result.delivery.message ?? null,
+        });
+      }
+
+      showToast(this.refs, result.delivery ? COPY.t3FallbackCopied : COPY.copied, 1800);
       this.cancel();
       return;
     }
 
+    logCaptureResultToPageConsole(result);
     this.showCaptureFallback(result.fallback);
   }
 
@@ -512,6 +539,39 @@ function nextPaint(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   });
+}
+
+function logPointNShootPageEvent(step: string, details?: Record<string, unknown>): void {
+  console.warn("[PointNShoot]", step, details ?? {});
+}
+
+function logCaptureResultToPageConsole(result: CaptureResult): void {
+  const summary = result.ok
+    ? {
+        ok: true,
+        delivery: result.delivery ?? null,
+        imagePath: result.savedImage.filename,
+        imageBytes: result.savedImage.imageBytes,
+      }
+    : {
+        ok: false,
+        reason: result.reason,
+      };
+  const diagnostics = result.ok
+    ? result.diagnostics
+    : (result.diagnostics ?? result.fallback.diagnostics);
+
+  console.warn("[PointNShoot] capture result", summary);
+  logDiagnosticEntriesToPageConsole(diagnostics);
+}
+
+function logDiagnosticEntriesToPageConsole(entries?: DiagnosticLogEntry[]): void {
+  if (!entries || entries.length === 0) return;
+
+  for (const entry of entries) {
+    const method = entry.level === "error" ? console.error : console.warn;
+    method("[PointNShoot]", `${entry.scope}/${entry.step}`, entry.message, entry.details ?? {});
+  }
 }
 
 const reusableController =

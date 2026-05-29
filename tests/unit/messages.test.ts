@@ -84,6 +84,11 @@ describe("message guards", () => {
           width: 800,
           height: 600,
         },
+        delivery: {
+          ok: true,
+          tabId: 11,
+          url: "http://127.0.0.1:3773/thread/demo",
+        },
       }),
     ).toBe(true);
     expect(
@@ -104,6 +109,21 @@ describe("message guards", () => {
     expect(isCaptureRequestMessage({ type: "POINTNSHOOT_CAPTURE_REQUEST", payload: { ...request, debugMode: "true" } })).toBe(false);
     expect(isRenderRequestMessage({ type: "POINTNSHOOT_RENDER_REQUEST", payload: { request } })).toBe(false);
     expect(isCaptureResult({ ok: true, copied: true })).toBe(false);
+    expect(
+      isCaptureResult({
+        ok: true,
+        markdownPrompt: "# UI Note",
+        savedImage: {
+          downloadId: 7,
+          filename: "/Users/test/Downloads/PointNShoot-PNG/file.png",
+          requestedFilename: "PointNShoot-PNG/file.png",
+          imageBytes: 123,
+          width: 800,
+          height: 600,
+        },
+        delivery: { ok: true, tabId: "11", url: "http://127.0.0.1:3773" },
+      }),
+    ).toBe(false);
     expect(isRenderImageResult({ ok: false, reason: "not-real", fallback: { markdownPrompt: "# UI Note" } })).toBe(false);
   });
 });

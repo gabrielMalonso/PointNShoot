@@ -112,10 +112,24 @@ export type SavedImage = {
   height: number;
 };
 
+export type T3ComposerDeliveryResult =
+  | {
+      ok: true;
+      tabId: number | null;
+      url: string | null;
+      mode?: "http" | "tab";
+    }
+  | {
+      ok: false;
+      reason: string;
+      message?: string;
+    };
+
 export type CaptureSuccess = {
   ok: true;
   markdownPrompt: string;
   savedImage: SavedImage;
+  delivery?: T3ComposerDeliveryResult;
   diagnostics?: DiagnosticLogEntry[];
 };
 
