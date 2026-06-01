@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { isCaptureRequestMessage, isCaptureResult, isRenderImageResult, isRenderRequestMessage, isRuntimeMessage } from "../../src/shared/messages";
+import {
+  isCaptureRequestMessage,
+  isCaptureResult,
+  isRenderImageResult,
+  isRenderRequestMessage,
+  isRuntimeMessage,
+  isT3ComposerBridgeStatusResult,
+  isT3StatusRequestMessage,
+} from "../../src/shared/messages";
 import type { CaptureRequest } from "../../src/shared/types";
 
 const request: CaptureRequest = {
@@ -60,6 +68,7 @@ describe("message guards", () => {
     expect(isRuntimeMessage({ type: "POINTNSHOOT_START_PICKING" })).toBe(true);
     expect(isCaptureRequestMessage({ type: "POINTNSHOOT_CAPTURE_REQUEST", payload: request })).toBe(true);
     expect(isRenderRequestMessage({ type: "POINTNSHOOT_RENDER_REQUEST", payload: { request, screenshotDataUrl: "data:image/png;base64,abc" } })).toBe(true);
+    expect(isT3StatusRequestMessage({ type: "POINTNSHOOT_T3_STATUS_REQUEST", requestId: "pns-test", reason: "overlay-open" })).toBe(true);
   });
 
   it("normalizes legacy capture requests without debug mode", () => {
@@ -125,5 +134,36 @@ describe("message guards", () => {
       }),
     ).toBe(false);
     expect(isRenderImageResult({ ok: false, reason: "not-real", fallback: { markdownPrompt: "# UI Note" } })).toBe(false);
+  });
+
+  it("recognizes T3 Composer bridge status responses", () => {
+    expect(
+      isT3ComposerBridgeStatusResult({
+        ok: true,
+        connected: true,
+        reason: null,
+        checkedAtEpochMs: 123,
+        target: {
+          subscriberId: "pointnshoot-composer-test",
+          threadId: "thread-test",
+          threadTitle: "Integrar extensão ao Composer",
+          clientKind: "desktop",
+          activatedAtEpochMs: 100,
+          lastSeenAtEpochMs: 120,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isT3ComposerBridgeStatusResult({
+        ok: true,
+        connected: false,
+        reason: "composer-not-connected",
+        checkedAtEpochMs: 123,
+        target: null,
+      }),
+    ).toBe(true);
+    expect(isT3ComposerBridgeStatusResult({ ok: false, reason: "t3-status-http-failed" })).toBe(true);
+    expect(isT3ComposerBridgeStatusResult({ ok: true, connected: true, reason: null, target: null })).toBe(false);
+    expect(isT3StatusRequestMessage({ type: "POINTNSHOOT_T3_STATUS_REQUEST", requestId: 123 })).toBe(false);
   });
 });

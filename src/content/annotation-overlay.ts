@@ -7,6 +7,7 @@ export type OverlayRefs = {
   eventShield: HTMLDivElement;
   hud: HTMLElement;
   hudPickButton: HTMLButtonElement;
+  bridgeStatus: HTMLSpanElement;
   hudCloseButton: HTMLButtonElement;
   hoverBox: HTMLDivElement;
   lockedBox: HTMLDivElement;
@@ -24,6 +25,12 @@ export type FallbackHandlers = {
   onClose: () => void;
 };
 
+export type BridgeStatusPresentation = {
+  state: "checking" | "connected" | "warning" | "error";
+  label: string;
+  title?: string;
+};
+
 export function renderOverlayChrome(shadow: ShadowRoot): OverlayRefs {
   shadow.innerHTML = `
     <style>${overlayCss()}</style>
@@ -35,6 +42,7 @@ export function renderOverlayChrome(shadow: ShadowRoot): OverlayRefs {
         ${COPY.pick}
       </button>
       <span class="hud-title">${COPY.hudTitle}</span>
+      <span class="bridge-status is-checking" title="${COPY.bridgeChecking}" data-testid="pointnshoot-bridge-status">${COPY.bridgeChecking}</span>
       <button class="hud-close" type="button" aria-label="${COPY.closeOverlay}" data-testid="pointnshoot-close">×</button>
     </nav>
     <div class="box hover" part="hover"></div>
@@ -61,6 +69,7 @@ export function renderOverlayChrome(shadow: ShadowRoot): OverlayRefs {
     eventShield: mustFind<HTMLDivElement>(shadow, ".event-shield"),
     hud: mustFind<HTMLElement>(shadow, ".hud"),
     hudPickButton: mustFind<HTMLButtonElement>(shadow, ".hud-pick"),
+    bridgeStatus: mustFind<HTMLSpanElement>(shadow, ".bridge-status"),
     hudCloseButton: mustFind<HTMLButtonElement>(shadow, ".hud-close"),
     hoverBox: mustFind<HTMLDivElement>(shadow, ".hover"),
     lockedBox: mustFind<HTMLDivElement>(shadow, ".locked"),
@@ -95,6 +104,15 @@ export function setPickActive(refs: OverlayRefs, active: boolean): void {
 export function setDebugMode(refs: OverlayRefs, active: boolean): void {
   refs.debugButton.setAttribute("aria-pressed", String(active));
   refs.debugButton.classList.toggle("is-active", active);
+}
+
+export function setBridgeStatus(refs: OverlayRefs, status: BridgeStatusPresentation): void {
+  refs.bridgeStatus.textContent = status.label;
+  refs.bridgeStatus.title = status.title ?? status.label;
+  refs.bridgeStatus.classList.toggle("is-checking", status.state === "checking");
+  refs.bridgeStatus.classList.toggle("is-connected", status.state === "connected");
+  refs.bridgeStatus.classList.toggle("is-warning", status.state === "warning");
+  refs.bridgeStatus.classList.toggle("is-error", status.state === "error");
 }
 
 export function setPageInteractionBlocked(refs: OverlayRefs, blocked: boolean): void {
@@ -311,6 +329,56 @@ function overlayCss(): string {
       font: 650 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       letter-spacing: 0.04em;
       text-transform: uppercase;
+    }
+
+    .bridge-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: clamp(112px, 36vw, 300px);
+      min-width: 104px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: rgba(244, 249, 255, 0.72);
+      border-left: 1px solid rgba(140, 200, 236, 0.16);
+      padding: 0 8px;
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .bridge-status::before {
+      content: "";
+      flex: 0 0 auto;
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(244, 249, 255, 0.46);
+    }
+
+    .bridge-status.is-connected {
+      color: #bff5dc;
+    }
+
+    .bridge-status.is-connected::before {
+      background: #4fe28f;
+      box-shadow: 0 0 9px rgba(79, 226, 143, 0.48);
+    }
+
+    .bridge-status.is-warning {
+      color: #ffe6a8;
+    }
+
+    .bridge-status.is-warning::before {
+      background: #f7bf3c;
+    }
+
+    .bridge-status.is-error {
+      color: #ffc0c7;
+    }
+
+    .bridge-status.is-error::before {
+      background: #ff6577;
     }
 
     .hud-close {

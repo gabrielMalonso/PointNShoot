@@ -115,9 +115,34 @@ export type SavedImage = {
 export type T3ComposerDeliveryResult =
   | {
       ok: true;
+      requestId?: string;
       tabId: number | null;
       url: string | null;
       mode?: "http" | "tab";
+    }
+  | {
+      ok: false;
+      requestId?: string;
+      reason: string;
+      message?: string;
+    };
+
+export type T3ComposerBridgeStatusTarget = {
+  subscriberId: string;
+  threadId: string;
+  threadTitle: string | null;
+  clientKind: "browser" | "desktop";
+  activatedAtEpochMs: number;
+  lastSeenAtEpochMs: number;
+};
+
+export type T3ComposerBridgeStatusResult =
+  | {
+      ok: true;
+      connected: boolean;
+      reason: "composer-not-connected" | null;
+      checkedAtEpochMs: number;
+      target: T3ComposerBridgeStatusTarget | null;
     }
   | {
       ok: false;
@@ -166,6 +191,7 @@ export type PointNShootMessage =
   | { type: "POINTNSHOOT_TOGGLE_OVERLAY" }
   | { type: "POINTNSHOOT_START_PICKING" }
   | { type: "POINTNSHOOT_CANCEL" }
+  | { type: "POINTNSHOOT_T3_STATUS_REQUEST"; requestId?: string; reason?: string }
   | { type: "POINTNSHOOT_CAPTURE_REQUEST"; payload: CaptureRequest }
   | { type: "POINTNSHOOT_CAPTURE_DONE"; payload: CaptureResult }
   | { type: "POINTNSHOOT_CAPTURE_FAILED"; payload: CaptureResult };

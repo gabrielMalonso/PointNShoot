@@ -13,6 +13,21 @@ test.beforeEach(async ({ page }) => {
     const listeners: unknown[] = [];
     browserWindow.__lastPnsRequest = null;
     browserWindow.__pnsRequests = [];
+    browserWindow.__pnsStatusRequests = [];
+    browserWindow.__pnsStatusResponse = {
+      ok: true,
+      connected: true,
+      reason: null,
+      checkedAtEpochMs: 123,
+      target: {
+        subscriberId: "pointnshoot-composer-e2e",
+        threadId: "thread-e2e",
+        threadTitle: "Integrar extensão ao Composer",
+        clientKind: "desktop",
+        activatedAtEpochMs: 100,
+        lastSeenAtEpochMs: 120,
+      },
+    };
     browserWindow.__pnsResponses = [];
     browserWindow.__emitPnsRuntimeMessage = (message: unknown) => {
       listeners.forEach((listener) => {
@@ -50,6 +65,11 @@ test.beforeEach(async ({ page }) => {
           },
         },
         async sendMessage(message: unknown) {
+          if ((message as { type?: unknown })?.type === "POINTNSHOOT_T3_STATUS_REQUEST") {
+            browserWindow.__pnsStatusRequests.push(message);
+            return browserWindow.__pnsStatusResponse;
+          }
+
           browserWindow.__lastPnsRequest = message;
           browserWindow.__pnsRequests.push(message);
           return (
@@ -125,6 +145,8 @@ test("toggles the persistent overlay and Pick mode separately", async ({ page })
   const pickButton = page.getByRole("button", { name: "Pick" });
   await expect(pickButton).toBeVisible();
   await expect(pickButton).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByTestId("pointnshoot-bridge-status")).toContainText("T3 conectado: Integrar extensão ao Composer");
+  await expect.poll(() => page.evaluate(() => (window as any).__pnsStatusRequests.length)).toBeGreaterThan(0);
   await expect(page.locator('textarea[aria-label="Comentário"]')).toBeHidden();
 
   await pickButton.click();

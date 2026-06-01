@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildT3ComposerIntakePayload,
   deliverToT3Composer,
+  readT3ComposerStatus,
   type T3ComposerDeliveryChrome,
   type T3ComposerDeliveryTab,
 } from "../../src/background/t3-composer";
@@ -74,6 +75,7 @@ describe("deliverToT3Composer", () => {
       ),
     ).resolves.toEqual({
       ok: true,
+      requestId: "pns-test",
       tabId: null,
       url: "http://127.0.0.1:3773/api/pointnshoot/composer-intake",
       mode: "http",
@@ -125,6 +127,7 @@ describe("deliverToT3Composer", () => {
       ),
     ).resolves.toEqual({
       ok: true,
+      requestId: "pns-test",
       tabId: 11,
       url: "http://127.0.0.1:3773/thread/demo",
       mode: "tab",
@@ -171,6 +174,7 @@ describe("deliverToT3Composer", () => {
       ),
     ).resolves.toEqual({
       ok: true,
+      requestId: "pns-test",
       tabId: 22,
       url: "http://127.0.0.1:3773/",
       mode: "tab",
@@ -208,6 +212,84 @@ describe("deliverToT3Composer", () => {
     ).resolves.toMatchObject({
       ok: false,
       reason: "t3-open-failed",
+      requestId: "pns-test",
+    });
+  });
+
+  it("does not fall back to tabs when the HTTP bridge reports no Composer target", async () => {
+    const fetchApi = vi.fn(async () => ({
+      ok: false,
+      status: 409,
+      statusText: "Conflict",
+      json: async () => ({ ok: false, reason: "composer-not-connected" }),
+    })) as unknown as typeof fetch;
+    const api = createChromeApi({
+      tabs: [
+        tab({
+          id: 11,
+          url: "http://127.0.0.1:3773/thread/demo",
+          title: "T3 Code",
+        }),
+      ],
+      executeScript: async () => [],
+    });
+
+    await expect(
+      deliverToT3Composer(
+        {
+          markdownPrompt: "# UI Note",
+          savedImage,
+          requestId: "pns-test",
+        },
+        api,
+        fetchApi,
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      requestId: "pns-test",
+      reason: "composer-not-connected",
+    });
+    expect(api.tabs.query).not.toHaveBeenCalled();
+  });
+});
+
+describe("readT3ComposerStatus", () => {
+  it("reads the active T3 Composer target from the HTTP status bridge", async () => {
+    const status = {
+      ok: true,
+      connected: true,
+      reason: null,
+      checkedAtEpochMs: 123,
+      target: {
+        subscriberId: "pointnshoot-composer-test",
+        threadId: "thread-test",
+        threadTitle: "Integrar extensão ao Composer",
+        clientKind: "desktop",
+        activatedAtEpochMs: 100,
+        lastSeenAtEpochMs: 120,
+      },
+    };
+    const fetchApi = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => status,
+    })) as unknown as typeof fetch;
+
+    await expect(readT3ComposerStatus({ requestId: "pns-test" }, fetchApi)).resolves.toEqual(status);
+    expect(fetchApi).toHaveBeenCalledWith(
+      "http://127.0.0.1:3773/api/pointnshoot/composer-intake/status",
+      expect.objectContaining({
+        method: "GET",
+      }),
+    );
+  });
+
+  it("returns an actionable status failure when T3 is unreachable", async () => {
+    await expect(
+      readT3ComposerStatus({ requestId: "pns-test" }, createUnavailableFetch()),
+    ).resolves.toMatchObject({
+      ok: false,
+      reason: "t3-status-http-failed",
     });
   });
 });

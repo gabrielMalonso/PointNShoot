@@ -4,6 +4,7 @@ import {
   hideHud,
   hidePanel,
   renderOverlayChrome,
+  setBridgeStatus,
   setCapturing,
   setDebugMode,
   setPageInteractionBlocked,
@@ -13,20 +14,21 @@ import {
   showHud,
   showPanel,
   showToast,
+  type BridgeStatusPresentation,
   type OverlayRefs,
 } from "./annotation-overlay";
-import { createCaptureRequest } from "./page-context";
+import { createCaptureRequest, createCaptureRequestId } from "./page-context";
 import { createPointNShootShadowRoot, isPointNShootEvent, ROOT_ID, stopHostilePageHandlers } from "./shadow-root";
 import { elementLabel, elementRect, findPickTarget, placeFixedBox } from "./selector-overlay";
 import { clipboardCapabilityDetails } from "../shared/clipboard-diagnostics";
 import { COPY } from "../shared/copy";
 import { appendDiagnostic, errorDiagnostic, makeDiagnostic } from "../shared/diagnostics";
-import { MESSAGE_TYPES } from "../shared/messages";
-import type { CaptureFallback, CaptureResult, DiagnosticLogEntry } from "../shared/types";
+import { isT3ComposerBridgeStatusResult, MESSAGE_TYPES } from "../shared/messages";
+import type { CaptureFallback, CaptureResult, DiagnosticLogEntry, T3ComposerBridgeStatusResult, T3ComposerDeliveryResult } from "../shared/types";
 import { buildMinimalUiNote, buildUiNote } from "../shared/ui-note";
 
 type PointNShootState = "idle" | "picking" | "locked" | "capturing" | "fallback";
-const CONTROLLER_VERSION = "0.3.1";
+const CONTROLLER_VERSION = "0.4.0";
 
 declare global {
   interface Window {
@@ -46,6 +48,7 @@ class PointNShootController {
   private selectedElement: Element | null = null;
   private listenersAttached = false;
   private debugMode = false;
+  private bridgeStatusRefreshSeq = 0;
 
   constructor() {
     const { host, shadow } = createPointNShootShadowRoot();
@@ -93,6 +96,7 @@ class PointNShootController {
     setPickActive(this.refs, this.state !== "idle");
     setPageInteractionBlocked(this.refs, this.state !== "idle");
     this.attachListeners();
+    void this.refreshBridgeStatus("overlay-open");
   }
 
   hideOverlay(): void {
@@ -392,14 +396,24 @@ class PointNShootController {
       return;
     }
 
+    const requestId = createCaptureRequestId();
     let request: ReturnType<typeof createCaptureRequest> | null = null;
     this.state = "capturing";
     setCapturing(this.refs, true);
-    this.refs.host.style.visibility = "hidden";
-    await nextPaint();
 
     try {
-      request = createCaptureRequest(this.selectedElement, comment, { debugMode: this.debugMode });
+      const preflight = await this.refreshBridgeStatus("capture-preflight", requestId);
+      if (preflight && !isBridgeConnected(preflight)) {
+        showToast(this.refs, bridgePreflightToast(preflight), 1800);
+      }
+
+      this.refs.host.style.visibility = "hidden";
+      await nextPaint();
+
+      request = createCaptureRequest(this.selectedElement, comment, {
+        debugMode: this.debugMode,
+        id: requestId,
+      });
       logPointNShootPageEvent("capture:submit", {
         requestId: request.id,
         selector: request.element.shortSelector,
@@ -440,6 +454,56 @@ class PointNShootController {
     }
   }
 
+  private async refreshBridgeStatus(reason: string, requestId?: string): Promise<T3ComposerBridgeStatusResult | null> {
+    const refreshSeq = ++this.bridgeStatusRefreshSeq;
+    setBridgeStatus(this.refs, {
+      state: "checking",
+      label: COPY.bridgeChecking,
+      title: requestId ? `${COPY.bridgeChecking} (${requestId})` : COPY.bridgeChecking,
+    });
+
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: MESSAGE_TYPES.t3StatusRequest,
+        requestId,
+        reason,
+      })) as unknown;
+      const status = isT3ComposerBridgeStatusResult(response)
+        ? response
+        : ({
+            ok: false,
+            reason: "t3-status-malformed",
+            message: "PointNShoot service worker returned a malformed T3 status response.",
+          } satisfies T3ComposerBridgeStatusResult);
+
+      if (refreshSeq === this.bridgeStatusRefreshSeq) {
+        setBridgeStatus(this.refs, bridgeStatusPresentation(status));
+      }
+      logPointNShootPageEvent("bridge:status", {
+        requestId: requestId ?? null,
+        reason,
+        ...bridgeStatusLogDetails(status),
+      });
+      return status;
+    } catch (error) {
+      const status = {
+        ok: false,
+        reason: "t3-status-request-failed",
+        message: error instanceof Error ? error.message : String(error),
+      } satisfies T3ComposerBridgeStatusResult;
+
+      if (refreshSeq === this.bridgeStatusRefreshSeq) {
+        setBridgeStatus(this.refs, bridgeStatusPresentation(status));
+      }
+      logPointNShootPageEvent("bridge:status", {
+        requestId: requestId ?? null,
+        reason,
+        ...bridgeStatusLogDetails(status),
+      });
+      return status;
+    }
+  }
+
   private async handleCaptureResult(result: CaptureResult): Promise<void> {
     if (result.ok) {
       if (result.delivery?.ok) {
@@ -461,12 +525,13 @@ class PointNShootController {
 
       if (result.delivery && !result.delivery.ok) {
         logPointNShootPageEvent("capture:t3-fallback-copied", {
+          requestId: result.delivery.requestId ?? null,
           reason: result.delivery.reason,
           message: result.delivery.message ?? null,
         });
       }
 
-      showToast(this.refs, result.delivery ? COPY.t3FallbackCopied : COPY.copied, 1800);
+      showToast(this.refs, result.delivery ? deliveryFailureToast(result.delivery) : COPY.copied, 1800);
       this.cancel();
       return;
     }
@@ -539,6 +604,74 @@ function nextPaint(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   });
+}
+
+function isBridgeConnected(status: T3ComposerBridgeStatusResult): boolean {
+  return status.ok && status.connected;
+}
+
+function bridgePreflightToast(status: T3ComposerBridgeStatusResult): string {
+  if (!status.ok) return COPY.t3UnreachableWillCopy;
+  if (!status.connected) return COPY.t3NoComposerWillCopy;
+  return COPY.t3FallbackWillCopy;
+}
+
+function deliveryFailureToast(delivery: T3ComposerDeliveryResult): string {
+  if (delivery.ok) return COPY.sentToT3;
+
+  if (delivery.reason === "composer-not-connected") return COPY.t3NoComposerCopied;
+  if (delivery.reason === "t3-http-failed" || delivery.reason === "t3-status-http-failed") {
+    return COPY.t3UnreachableCopied;
+  }
+  if (delivery.reason === "t3-response-timeout" || delivery.reason === "t3-no-response") {
+    return COPY.t3AckTimeoutCopied;
+  }
+  return `T3 indisponível (${delivery.reason}); nota copiada.`;
+}
+
+function bridgeStatusPresentation(status: T3ComposerBridgeStatusResult): BridgeStatusPresentation {
+  if (!status.ok) {
+    return {
+      state: "error",
+      label: COPY.bridgeUnavailable,
+      title: status.message ? `${status.reason}: ${status.message}` : status.reason,
+    };
+  }
+
+  if (!status.connected) {
+    return {
+      state: "warning",
+      label: COPY.bridgeNoComposer,
+      title: status.reason ?? COPY.bridgeNoComposer,
+    };
+  }
+
+  const targetLabel = status.target?.threadTitle?.trim() || status.target?.threadId || "Composer";
+  return {
+    state: "connected",
+    label: `${COPY.bridgeConnected}: ${targetLabel}`,
+    title: `${COPY.bridgeConnected}: ${targetLabel} (${status.target?.clientKind ?? "browser"})`,
+  };
+}
+
+function bridgeStatusLogDetails(status: T3ComposerBridgeStatusResult): Record<string, unknown> {
+  if (!status.ok) {
+    return {
+      ok: false,
+      statusReason: status.reason,
+      message: status.message ?? null,
+    };
+  }
+
+  return {
+    ok: true,
+    connected: status.connected,
+    statusReason: status.reason,
+    checkedAtEpochMs: status.checkedAtEpochMs,
+    targetThreadId: status.target?.threadId ?? null,
+    targetThreadTitle: status.target?.threadTitle ?? null,
+    targetClientKind: status.target?.clientKind ?? null,
+  };
 }
 
 function logPointNShootPageEvent(step: string, details?: Record<string, unknown>): void {

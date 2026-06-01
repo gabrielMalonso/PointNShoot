@@ -1,12 +1,15 @@
-import type { SavedImage, T3ComposerDeliveryResult } from "../shared/types";
+import { isT3ComposerBridgeStatusResult } from "../shared/messages";
+import type { SavedImage, T3ComposerBridgeStatusResult, T3ComposerDeliveryResult } from "../shared/types";
 
 const T3_COMPOSER_INTAKE_REQUEST_TYPE = "t3code.composer-intake.request.v1";
 const T3_COMPOSER_INTAKE_RESPONSE_TYPE = "t3code.composer-intake.response.v1";
 const DEFAULT_T3_ORIGIN = "http://127.0.0.1:3773";
 const DEFAULT_T3_COMPOSER_INTAKE_ENDPOINT = `${DEFAULT_T3_ORIGIN}/api/pointnshoot/composer-intake`;
+const DEFAULT_T3_COMPOSER_STATUS_ENDPOINT = `${DEFAULT_T3_COMPOSER_INTAKE_ENDPOINT}/status`;
 const T3_TAB_URL_PATTERNS = ["http://127.0.0.1/*", "http://localhost/*"];
 const T3_COMPOSER_DELIVERY_TIMEOUT_MS = 1_500;
 const T3_COMPOSER_HTTP_TIMEOUT_MS = 1_500;
+const T3_COMPOSER_STATUS_TIMEOUT_MS = 1_500;
 const T3_COMPOSER_OPEN_TIMEOUT_MS = 5_000;
 
 export type T3ComposerIntakePayload = {
@@ -73,12 +76,17 @@ export type T3ComposerDeliveryChrome = {
 };
 
 type T3ComposerFetch = typeof fetch;
-type T3ComposerDeliveryDiagnosticSink = (diagnostic: {
+type T3ComposerDiagnosticSink = (diagnostic: {
   level: "info" | "warn";
   step: string;
   message: string;
   details: Record<string, unknown>;
 }) => void;
+
+export type T3ComposerStatusOptions = {
+  requestId?: string;
+  reason?: string;
+};
 
 type T3ComposerHttpBridgeResponse =
   | {
@@ -99,7 +107,7 @@ export async function deliverToT3Composer(
   },
   chromeApi: T3ComposerDeliveryChrome = readChromeApi(),
   fetchApi: T3ComposerFetch = globalThis.fetch.bind(globalThis),
-  onDiagnostic?: T3ComposerDeliveryDiagnosticSink,
+  onDiagnostic?: T3ComposerDiagnosticSink,
 ): Promise<T3ComposerDeliveryResult> {
   const payload = buildT3ComposerIntakePayload(input);
   logT3Delivery(
@@ -125,6 +133,7 @@ export async function deliverToT3Composer(
     onDiagnostic,
   );
   if (httpDelivery.ok) return httpDelivery;
+  if (!shouldUseTabFallbackAfterHttp(httpDelivery)) return httpDelivery;
 
   const candidateTabs = sortCandidateTabs(
     await chromeApi.tabs.query({
@@ -203,10 +212,41 @@ export async function deliverToT3Composer(
     );
     return {
       ok: false,
+      requestId: payload.requestId,
       reason: "t3-open-failed",
       message: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+export async function readT3ComposerStatus(
+  options: T3ComposerStatusOptions = {},
+  fetchApi: T3ComposerFetch = globalThis.fetch.bind(globalThis),
+  onDiagnostic?: T3ComposerDiagnosticSink,
+): Promise<T3ComposerBridgeStatusResult> {
+  logT3Delivery(
+    "info",
+    "status:start",
+    {
+      requestId: options.requestId ?? null,
+      reason: options.reason ?? null,
+      endpoint: DEFAULT_T3_COMPOSER_STATUS_ENDPOINT,
+    },
+    onDiagnostic,
+  );
+
+  const status = await fetchT3ComposerStatus(fetchApi);
+  logT3Delivery(
+    status.ok ? "info" : "warn",
+    "status:result",
+    {
+      requestId: options.requestId ?? null,
+      reason: options.reason ?? null,
+      ...statusLogDetails(status),
+    },
+    onDiagnostic,
+  );
+  return status;
 }
 
 export function buildT3ComposerIntakePayload(input: {
@@ -240,7 +280,12 @@ async function deliverPayloadToTab(
   options: { focusOnSuccess?: boolean } = {},
 ): Promise<T3ComposerDeliveryResult> {
   if (typeof tab.id !== "number") {
-    return { ok: false, reason: "tab-id-missing", message: "Chrome returned a tab without an id." };
+    return {
+      ok: false,
+      requestId: payload.requestId,
+      reason: "tab-id-missing",
+      message: "Chrome returned a tab without an id.",
+    };
   }
 
   try {
@@ -253,13 +298,14 @@ async function deliverPayloadToTab(
     if (!isT3ComposerBridgeResponse(response, payload.requestId)) {
       return {
         ok: false,
+        requestId: payload.requestId,
         reason: "t3-no-response",
         message: responseToMessage(response),
       };
     }
 
     if (!response.ok) {
-      return { ok: false, reason: response.reason };
+      return { ok: false, requestId: payload.requestId, reason: response.reason };
     }
 
     if (options.focusOnSuccess) {
@@ -268,6 +314,7 @@ async function deliverPayloadToTab(
 
     return {
       ok: true,
+      requestId: payload.requestId,
       tabId: tab.id,
       url: tab.url ?? tab.pendingUrl ?? null,
       mode: "tab",
@@ -275,6 +322,7 @@ async function deliverPayloadToTab(
   } catch (error) {
     return {
       ok: false,
+      requestId: payload.requestId,
       reason: "t3-injection-failed",
       message: error instanceof Error ? error.message : String(error),
     };
@@ -302,6 +350,7 @@ async function deliverPayloadToHttpBridge(
     if (response.ok && body?.ok) {
       return {
         ok: true,
+        requestId: payload.requestId,
         tabId: null,
         url: DEFAULT_T3_COMPOSER_INTAKE_ENDPOINT,
         mode: "http",
@@ -311,6 +360,7 @@ async function deliverPayloadToHttpBridge(
     const reason = body?.ok === false ? body.reason : `t3-http-${response.status}`;
     return {
       ok: false,
+      requestId: payload.requestId,
       reason,
       message:
         body?.ok === false
@@ -320,12 +370,50 @@ async function deliverPayloadToHttpBridge(
   } catch (error) {
     return {
       ok: false,
+      requestId: payload.requestId,
       reason: "t3-http-failed",
       message: error instanceof Error ? error.message : String(error),
     };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchT3ComposerStatus(fetchApi: T3ComposerFetch): Promise<T3ComposerBridgeStatusResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), T3_COMPOSER_STATUS_TIMEOUT_MS);
+
+  try {
+    const response = await fetchApi(DEFAULT_T3_COMPOSER_STATUS_ENDPOINT, {
+      method: "GET",
+      headers: {
+        "x-pointnshoot-extension-id": readExtensionId(),
+      },
+      signal: controller.signal,
+    });
+    const body = (await response.json().catch(() => null)) as unknown;
+    if (isT3ComposerBridgeStatusResult(body)) return body;
+
+    return {
+      ok: false,
+      reason: `t3-status-http-${response.status}`,
+      message: response.ok
+        ? "T3 status bridge returned a malformed response."
+        : `HTTP ${response.status} ${response.statusText || "response"}`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "t3-status-http-failed",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function shouldUseTabFallbackAfterHttp(result: T3ComposerDeliveryResult): boolean {
+  return !result.ok && result.reason === "t3-http-failed";
 }
 
 function readExtensionId(): string {
@@ -340,7 +428,12 @@ function postT3ComposerIntakeRequest(
   return new Promise((resolve) => {
     const timeout = window.setTimeout(() => {
       cleanup();
-      resolve({ ok: false, reason: "t3-response-timeout" });
+      resolve({
+        type: responseType,
+        requestId: payload.requestId,
+        ok: false,
+        reason: "t3-response-timeout",
+      });
     }, timeoutMs);
 
     const cleanup = () => {
@@ -457,7 +550,7 @@ function logT3Delivery(
   level: "info" | "warn",
   step: string,
   details: Record<string, unknown>,
-  onDiagnostic?: T3ComposerDeliveryDiagnosticSink,
+  onDiagnostic?: T3ComposerDiagnosticSink,
 ): void {
   console.warn("[PointNShoot][T3]", level, step, details);
   onDiagnostic?.({
@@ -491,7 +584,28 @@ function deliveryLogDetails(result: T3ComposerDeliveryResult): Record<string, un
 
   return {
     ok: false,
+    requestId: result.requestId ?? null,
     reason: result.reason,
     message: result.message ?? null,
+  };
+}
+
+function statusLogDetails(result: T3ComposerBridgeStatusResult): Record<string, unknown> {
+  if (!result.ok) {
+    return {
+      ok: false,
+      statusReason: result.reason,
+      message: result.message ?? null,
+    };
+  }
+
+  return {
+    ok: true,
+    connected: result.connected,
+    statusReason: result.reason,
+    checkedAtEpochMs: result.checkedAtEpochMs,
+    targetThreadId: result.target?.threadId ?? null,
+    targetThreadTitle: result.target?.threadTitle ?? null,
+    targetClientKind: result.target?.clientKind ?? null,
   };
 }
