@@ -1,4 +1,12 @@
-import type { CaptureResult, CaptureRequest, PointNShootMessage, RenderImageResult, RenderRequestMessage, RuntimeMessage } from "./types";
+import type {
+  CaptureResult,
+  CaptureRequest,
+  PointNShootMessage,
+  RenderImageResult,
+  RenderRequestMessage,
+  RuntimeMessage,
+  T3ComposerBridgeStatusResult,
+} from "./types";
 
 export const MESSAGE_TYPES = {
   toggleOverlay: "POINTNSHOOT_TOGGLE_OVERLAY",
@@ -7,6 +15,7 @@ export const MESSAGE_TYPES = {
   captureRequest: "POINTNSHOOT_CAPTURE_REQUEST",
   captureDone: "POINTNSHOOT_CAPTURE_DONE",
   captureFailed: "POINTNSHOOT_CAPTURE_FAILED",
+  t3StatusRequest: "POINTNSHOOT_T3_STATUS_REQUEST",
   renderRequest: "POINTNSHOOT_RENDER_REQUEST",
 } as const;
 
@@ -18,6 +27,15 @@ export function isCaptureRequestMessage(value: unknown): value is Extract<PointN
   return isRecord(value) && value.type === MESSAGE_TYPES.captureRequest && isCaptureRequest(value.payload);
 }
 
+export function isT3StatusRequestMessage(value: unknown): value is Extract<PointNShootMessage, { type: "POINTNSHOOT_T3_STATUS_REQUEST" }> {
+  return (
+    isRecord(value) &&
+    value.type === MESSAGE_TYPES.t3StatusRequest &&
+    (value.requestId === undefined || typeof value.requestId === "string") &&
+    (value.reason === undefined || typeof value.reason === "string")
+  );
+}
+
 export function isRenderRequestMessage(value: unknown): value is RenderRequestMessage {
   if (!isRecord(value) || value.type !== MESSAGE_TYPES.renderRequest || !isRecord(value.payload)) return false;
   return typeof value.payload.screenshotDataUrl === "string" && isCaptureRequest(value.payload.request);
@@ -27,7 +45,11 @@ export function isCaptureResult(value: unknown): value is CaptureResult {
   if (!isRecord(value) || typeof value.ok !== "boolean") return false;
 
   if (value.ok === true) {
-    return typeof value.markdownPrompt === "string" && isSavedImage(value.savedImage);
+    return (
+      typeof value.markdownPrompt === "string" &&
+      isSavedImage(value.savedImage) &&
+      isT3ComposerDeliveryResult(value.delivery)
+    );
   }
 
   return isCaptureFailureReason(value.reason) && isCaptureFallback(value.fallback);
@@ -81,6 +103,50 @@ function isSavedImage(value: unknown): boolean {
     typeof value.imageBytes === "number" &&
     typeof value.width === "number" &&
     typeof value.height === "number"
+  );
+}
+
+function isT3ComposerDeliveryResult(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value) || typeof value.ok !== "boolean") return false;
+  if (value.ok === true) {
+    return (
+      (value.requestId === undefined || typeof value.requestId === "string") &&
+      (typeof value.tabId === "number" || value.tabId === null) &&
+      (typeof value.url === "string" || value.url === null)
+    );
+  }
+  return (
+    (value.requestId === undefined || typeof value.requestId === "string") &&
+    typeof value.reason === "string" &&
+    (value.message === undefined || typeof value.message === "string")
+  );
+}
+
+export function isT3ComposerBridgeStatusResult(value: unknown): value is T3ComposerBridgeStatusResult {
+  if (!isRecord(value) || typeof value.ok !== "boolean") return false;
+
+  if (value.ok === false) {
+    return typeof value.reason === "string" && (value.message === undefined || typeof value.message === "string");
+  }
+
+  return (
+    typeof value.connected === "boolean" &&
+    (value.reason === "composer-not-connected" || value.reason === null) &&
+    typeof value.checkedAtEpochMs === "number" &&
+    (value.target === null || isT3ComposerBridgeStatusTarget(value.target))
+  );
+}
+
+function isT3ComposerBridgeStatusTarget(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.subscriberId === "string" &&
+    typeof value.threadId === "string" &&
+    (typeof value.threadTitle === "string" || value.threadTitle === null) &&
+    (value.clientKind === "browser" || value.clientKind === "desktop") &&
+    typeof value.activatedAtEpochMs === "number" &&
+    typeof value.lastSeenAtEpochMs === "number"
   );
 }
 

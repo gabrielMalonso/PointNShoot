@@ -13,6 +13,21 @@ test.beforeEach(async ({ page }) => {
     const listeners: unknown[] = [];
     browserWindow.__lastPnsRequest = null;
     browserWindow.__pnsRequests = [];
+    browserWindow.__pnsStatusRequests = [];
+    browserWindow.__pnsStatusResponse = {
+      ok: true,
+      connected: true,
+      reason: null,
+      checkedAtEpochMs: 123,
+      target: {
+        subscriberId: "pointnshoot-composer-e2e",
+        threadId: "thread-e2e",
+        threadTitle: "Integrar extensão ao Composer",
+        clientKind: "desktop",
+        activatedAtEpochMs: 100,
+        lastSeenAtEpochMs: 120,
+      },
+    };
     browserWindow.__pnsResponses = [];
     browserWindow.__emitPnsRuntimeMessage = (message: unknown) => {
       listeners.forEach((listener) => {
@@ -50,6 +65,11 @@ test.beforeEach(async ({ page }) => {
           },
         },
         async sendMessage(message: unknown) {
+          if ((message as { type?: unknown })?.type === "POINTNSHOOT_T3_STATUS_REQUEST") {
+            browserWindow.__pnsStatusRequests.push(message);
+            return browserWindow.__pnsStatusResponse;
+          }
+
           browserWindow.__lastPnsRequest = message;
           browserWindow.__pnsRequests.push(message);
           return (
@@ -125,6 +145,8 @@ test("toggles the persistent overlay and Pick mode separately", async ({ page })
   const pickButton = page.getByRole("button", { name: "Pick" });
   await expect(pickButton).toBeVisible();
   await expect(pickButton).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByTestId("pointnshoot-bridge-status")).toContainText("T3 conectado: Integrar extensão ao Composer");
+  await expect.poll(() => page.evaluate(() => (window as any).__pnsStatusRequests.length)).toBeGreaterThan(0);
   await expect(page.locator('textarea[aria-label="Comentário"]')).toBeHidden();
 
   await pickButton.click();
@@ -233,7 +255,7 @@ test("selects an element, saves the PNG result and copies the UI Note text", asy
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
   await page.locator('textarea[aria-label="Comentário"]').fill("Aumentar o respiro do cabecalho do card.");
-  await page.getByRole("button", { name: "Copiar" }).click();
+  await page.getByRole("button", { name: "Enviar ao T3" }).click();
 
   await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(1);
   await expect.poll(() => page.evaluate(() => (window as any).__clipboardTextWrites.length), { timeout: 2_000 }).toBe(1);
@@ -255,6 +277,44 @@ test("selects an element, saves the PNG result and copies the UI Note text", asy
   expect(request.payload.element.topElementAtPoint).toBeTruthy();
 });
 
+test("uses a successful T3 Composer delivery without writing the clipboard", async ({ page }) => {
+  await page.goto(new URL("../fixtures/simple-page.html", import.meta.url).toString());
+  await page.addScriptTag({ path: contentScriptPath });
+  await page.evaluate((imagePath) => {
+    (window as any).__pnsResponses.push({
+      ok: true,
+      markdownPrompt: `# UI Note\n\n## Prompt\n\nenviar ao composer\n\n## Informações\n\nImagem:\n\`${imagePath}\``,
+      savedImage: {
+        downloadId: 7,
+        filename: imagePath,
+        requestedFilename: "PointNShoot-PNG/2026-05-25-1900-h1-capture1.png",
+        imageBytes: 1234,
+        width: 960,
+        height: 720,
+      },
+      delivery: {
+        ok: true,
+        tabId: 11,
+        url: "http://127.0.0.1:3773/thread/demo",
+      },
+    });
+    window.__POINTNSHOOT_START__?.();
+  }, savedPath);
+
+  const card = page.locator('[data-shot-target="spacing-card"]');
+  const box = await card.boundingBox();
+  expect(box).toBeTruthy();
+
+  await page.mouse.move(box!.x + 32, box!.y + 32);
+  await page.mouse.click(box!.x + 32, box!.y + 32);
+  await page.locator('textarea[aria-label="Comentário"]').fill("Enviar sem clipboard.");
+  await page.getByRole("button", { name: "Enviar ao T3" }).click();
+
+  await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(1);
+  await expect.poll(() => page.evaluate(() => (window as any).__clipboardTextWrites.length), { timeout: 2_000 }).toBe(0);
+  await expect(page.locator('textarea[aria-label="Comentário"]')).toBeHidden({ timeout: 2_000 });
+});
+
 test("adds debug metadata to the capture request when Debug is enabled", async ({ page }) => {
   await page.goto(new URL("../fixtures/simple-page.html", import.meta.url).toString());
   await page.addScriptTag({ path: contentScriptPath });
@@ -274,7 +334,7 @@ test("adds debug metadata to the capture request when Debug is enabled", async (
   await expect(debugButton).toHaveAttribute("aria-pressed", "true");
 
   await page.locator('textarea[aria-label="Comentário"]').fill("Preciso debugar o layout deste card.");
-  await page.getByRole("button", { name: "Copiar" }).click();
+  await page.getByRole("button", { name: "Enviar ao T3" }).click();
 
   await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(1);
   const request = await page.evaluate(() => (window as any).__lastPnsRequest);
@@ -321,7 +381,7 @@ test("shows a manual fallback when writeText is blocked after the image is saved
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
   await page.locator('textarea[aria-label="Comentário"]').fill("clipboard bloqueado");
-  await page.getByRole("button", { name: "Copiar" }).click();
+  await page.getByRole("button", { name: "Enviar ao T3" }).click();
 
   const fallback = page.locator('section[aria-label="Nota não copiada"]');
   await expect(fallback).toBeVisible();
@@ -344,7 +404,7 @@ test("empty comments still prevent submission", async ({ page }) => {
 
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
-  await page.getByRole("button", { name: "Copiar" }).click();
+  await page.getByRole("button", { name: "Enviar ao T3" }).click();
 
   await expect(page.getByText("Escreva um comentário antes de capturar.")).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length)).toBe(0);
@@ -377,7 +437,7 @@ test("successful copy can run twice after reinjection", async ({ page }) => {
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
   await page.locator('textarea[aria-label="Comentário"]').fill("primeira copia");
-  await page.getByRole("button", { name: "Copiar" }).click();
+  await page.getByRole("button", { name: "Enviar ao T3" }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(1);
   await expect(page.getByRole("button", { name: "Pick" })).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator('textarea[aria-label="Comentário"]')).toBeHidden({ timeout: 2_000 });
@@ -388,7 +448,7 @@ test("successful copy can run twice after reinjection", async ({ page }) => {
   await page.mouse.click(box!.x + 42, box!.y + 42);
   await expect(page.locator('textarea[aria-label="Comentário"]')).toBeVisible();
   await page.locator('textarea[aria-label="Comentário"]').fill("segunda copia");
-  await page.getByRole("button", { name: "Copiar" }).click();
+  await page.getByRole("button", { name: "Enviar ao T3" }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(2);
 
   const writes = await page.evaluate(() => (window as any).__clipboardTextWrites);
@@ -414,7 +474,7 @@ test("copy and cancel buttons receive clicks inside the overlay", async ({ page 
   await page.mouse.move(box!.x + 32, box!.y + 32);
   await page.mouse.click(box!.x + 32, box!.y + 32);
   await page.locator('textarea[aria-label="Comentário"]').fill("quero deixar maior.");
-  await page.getByRole("button", { name: "Copiar" }).click();
+  await page.getByRole("button", { name: "Enviar ao T3" }).click();
 
   await expect.poll(() => page.evaluate(() => (window as any).__pnsRequests.length), { timeout: 2_000 }).toBe(1);
   const request = await page.evaluate(() => (window as any).__lastPnsRequest);

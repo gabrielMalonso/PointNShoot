@@ -1,11 +1,15 @@
 import { buildElementContext } from "../shared/metadata";
 import type { CaptureRequest } from "../shared/types";
 
-export function createCaptureRequest(element: Element, comment: string, options: { debugMode?: boolean } = {}): CaptureRequest {
+export function createCaptureRequest(
+  element: Element,
+  comment: string,
+  options: { debugMode?: boolean; id?: string } = {},
+): CaptureRequest {
   const debugMode = options.debugMode ?? false;
 
   return {
-    id: createId(),
+    id: options.id ?? createCaptureRequestId(),
     comment,
     element: buildElementContext(element, {
       debugMode,
@@ -19,7 +23,7 @@ export function createCaptureRequest(element: Element, comment: string, options:
   };
 }
 
-function createId(): string {
+export function createCaptureRequestId(): string {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `pns-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }

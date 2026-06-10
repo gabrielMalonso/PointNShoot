@@ -1,9 +1,10 @@
 import { appendDiagnostic, errorDiagnostic, makeDiagnostic } from "../shared/diagnostics";
 import { buildDownloadFilename, downloadRenderedPng, getConfiguredDownloadFolder } from "./downloads";
+import { deliverToT3Composer, readT3ComposerStatus } from "./t3-composer";
 import { toCaptureFailureReason } from "../shared/errors";
-import { isCaptureRequestMessage, isRenderImageResult, MESSAGE_TYPES } from "../shared/messages";
+import { isCaptureRequestMessage, isRenderImageResult, isT3StatusRequestMessage, MESSAGE_TYPES } from "../shared/messages";
 import { redactAndTruncate } from "../shared/privacy";
-import type { CaptureRequest, CaptureResult, DiagnosticLogEntry, RenderImageResult, RenderRequestMessage } from "../shared/types";
+import type { CaptureRequest, CaptureResult, DiagnosticLogEntry, RenderImageResult, RenderRequestMessage, T3ComposerBridgeStatusResult } from "../shared/types";
 import { buildUiNote } from "../shared/ui-note";
 
 const OFFSCREEN_PATH = "offscreen/offscreen.html";
@@ -19,6 +20,22 @@ chrome.commands.onCommand.addListener((command) => {
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  if (isT3StatusRequestMessage(message)) {
+    void readT3ComposerStatus({
+      requestId: message.requestId,
+      reason: message.reason ?? "runtime-status-request",
+    })
+      .then(sendResponse)
+      .catch((error: unknown) =>
+        sendResponse({
+          ok: false,
+          reason: "t3-status-failed",
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    return true;
+  }
+
   if (!isCaptureRequestMessage(message)) return false;
 
   void handleCapture(message.payload, sender)
@@ -66,6 +83,35 @@ async function handleCapture(request: CaptureRequest, sender: chrome.runtime.Mes
         tabId: sender.tab?.id ?? null,
         windowId: sender.tab?.windowId ?? null,
       }),
+    );
+
+    const preflight = await readT3ComposerStatus(
+      { requestId: request.id, reason: "capture-preflight" },
+      undefined,
+      (diagnostic) => {
+        diagnostics = appendDiagnostic(
+          diagnostics,
+          makeDiagnostic(
+            "background",
+            diagnostic.level,
+            `t3:${diagnostic.step}`,
+            diagnostic.message,
+            diagnostic.details,
+          ),
+        );
+      },
+    );
+    diagnostics = appendDiagnostic(
+      diagnostics,
+      makeDiagnostic(
+        "background",
+        isT3BridgeConnected(preflight) ? "info" : "warn",
+        "t3:preflight",
+        isT3BridgeConnected(preflight)
+          ? "T3 Composer bridge target is connected before capture."
+          : "T3 Composer bridge target is not connected before capture.",
+        { requestId: request.id, ...t3BridgeStatusDetails(preflight) },
+      ),
     );
 
     const screenshotDataUrl = await captureVisibleTab(sender.tab?.windowId);
@@ -141,10 +187,49 @@ async function handleCapture(request: CaptureRequest, sender: chrome.runtime.Mes
       }),
     );
 
+    const markdownPrompt = buildUiNote(request, { imagePath: savedImage.filename });
+    diagnostics = appendDiagnostic(
+      diagnostics,
+      makeDiagnostic("background", "info", "t3:deliver:start", "Sending UI Note to T3 Composer.", {
+        requestId: request.id,
+        filename: savedImage.filename,
+      }),
+    );
+    const delivery = await deliverToT3Composer(
+      { markdownPrompt, savedImage, requestId: request.id },
+      undefined,
+      undefined,
+      (diagnostic) => {
+        diagnostics = appendDiagnostic(
+          diagnostics,
+          makeDiagnostic(
+            "background",
+            diagnostic.level,
+            `t3:${diagnostic.step}`,
+            diagnostic.message,
+            diagnostic.details,
+          ),
+        );
+      },
+    );
+    diagnostics = appendDiagnostic(
+      diagnostics,
+      makeDiagnostic(
+        "background",
+        delivery.ok ? "info" : "warn",
+        delivery.ok ? "t3:deliver:complete" : "t3:deliver:failed",
+        delivery.ok ? "UI Note delivered to T3 Composer." : "Could not deliver UI Note to T3 Composer.",
+        delivery.ok
+          ? { requestId: request.id, tabId: delivery.tabId, url: delivery.url }
+          : { requestId: request.id, reason: delivery.reason, message: delivery.message ?? null },
+      ),
+    );
+
     return {
       ok: true,
-      markdownPrompt: buildUiNote(request, { imagePath: savedImage.filename }),
+      markdownPrompt,
       savedImage,
+      delivery,
       diagnostics,
     };
   } catch (error) {
@@ -153,6 +238,30 @@ async function handleCapture(request: CaptureRequest, sender: chrome.runtime.Mes
   } finally {
     await closeOffscreenDocument();
   }
+}
+
+function isT3BridgeConnected(status: T3ComposerBridgeStatusResult): boolean {
+  return status.ok && status.connected;
+}
+
+function t3BridgeStatusDetails(status: T3ComposerBridgeStatusResult): Record<string, unknown> {
+  if (!status.ok) {
+    return {
+      ok: false,
+      reason: status.reason,
+      message: status.message ?? null,
+    };
+  }
+
+  return {
+    ok: true,
+    connected: status.connected,
+    reason: status.reason,
+    targetThreadId: status.target?.threadId ?? null,
+    targetThreadTitle: status.target?.threadTitle ?? null,
+    targetClientKind: status.target?.clientKind ?? null,
+    targetLastSeenAtEpochMs: status.target?.lastSeenAtEpochMs ?? null,
+  };
 }
 
 function captureVisibleTab(windowId: number | undefined): Promise<string> {
